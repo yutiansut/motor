@@ -1,6 +1,8 @@
 from setuptools import setup
 import sys
 
+from synchro.synchrotest import SynchroTestCommand
+
 classifiers = """\
 Intended Audience :: Developers
 License :: OSI Approved :: Apache Software License
@@ -54,5 +56,6 @@ setup(name='motor',
       # use 'python setup.py test' to test
       setup_requires=['nose'],
       test_suite='nose.main',
+      cmdclass={'synchrotest': SynchroTestCommand},
       **kwargs
 )

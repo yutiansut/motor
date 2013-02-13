@@ -22,8 +22,10 @@ The environment variable TIMEOUT_SEC controls how long Synchro waits for each
 Motor operation to complete, default 5 seconds.
 """
 
+import glob
 import sys
-import synchro
+from os import path
+from setuptools import Command
 
 import nose
 from nose.config import Config
@@ -32,6 +34,7 @@ from nose.plugins.manager import PluginManager
 from nose.plugins.skip import Skip
 from nose.plugins.xunit import Xunit
 from nose.selector import Selector
+
 
 excluded_modules = [
     # Depending on PYTHONPATH, Motor's direct tests may be imported - don't
@@ -153,7 +156,10 @@ class SynchroNosePlugin(Plugin):
         return True
 
 
-if __name__ == '__main__':
+def main(pymongo_path):
+
+    import synchro
+
     # Monkey-patch all pymongo's unittests so they think Synchro is the
     # real PyMongo
     sys.modules['pymongo'] = synchro
@@ -181,6 +187,43 @@ if __name__ == '__main__':
     # can run to completion while foreground pauses
     sys.modules['time'] = synchro.TimeModule()
 
+    testpath = path.normpath(path.expanduser(path.join(pymongo_path, 'test')))
+    assert path.exists(testpath), "TODO"
+
+    argv = ['-w', testpath]
+
+    # Find where Pymongo was built for Python 3. If we built the C extensions
+    # this will be someplace like build/lib.<os>-<arch>-<python version>
+    PY3 = sys.version_info[0] == 3
+    if PY3:
+        ver = '.'.join(map(str, sys.version_info[:2]))
+        lib_dirs = glob.glob(path.join(pymongo_path, 'build', 'lib*' + ver))
+        assert lib_dirs, "First you need to build PyMongo with Python 3"
+
+        py3testpath = lib_dirs
+        argv.extend(['--py3where', py3testpath])
+        print 'py3testpath', py3testpath
+
     nose.main(
         config=Config(plugins=PluginManager()),
-        addplugins=[SynchroNosePlugin(), Skip(), Xunit()])
+        addplugins=[SynchroNosePlugin(), Skip(), Xunit()],
+        argv=argv)
+
+
+class SynchroTestCommand(Command):
+    """setuptools Command"""
+    description = "run my command"
+    user_options = [('pymongo=', None, "where to find PyMongo's checkout")]
+
+    def initialize_options(self):
+        """init options"""
+        self.pymongo = None
+
+    def finalize_options(self):
+        """finalize options"""
+        pass
+
+    def run(self):
+        """runner"""
+        assert self.pymongo, "Specify where to find PyMongo"
+        main(self.pymongo)
