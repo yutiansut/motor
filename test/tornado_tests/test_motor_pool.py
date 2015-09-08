@@ -188,8 +188,16 @@ class MotorPoolTest(MotorTest):
         cx = self.motor_client(max_pool_size=2,
                                waitQueueTimeoutMS=100,
                                waitQueueMultiple=3)
+
+        import inspect
+
+        def print_line():
+            print('test_wait_queue_multiple: %d' %
+                  inspect.currentframe().f_back.f_lineno)
+
         yield cx.open()
         pool = cx._get_primary_pool()
+        print_line()
 
         def get_socket_on_greenlet(future):
             try:
@@ -204,38 +212,53 @@ class MotorPoolTest(MotorTest):
             greenlet.greenlet(fn).switch()
             return future
 
+        print_line()
         s1 = yield get_socket()
+        print_line()
         self.assertEqual(1, pool.motor_sock_counter)
+        print_line()
 
+        print_line()
         s2 = yield get_socket()
+        print_line()
         self.assertEqual(2, pool.motor_sock_counter)
+        print_line()
 
         start = self.io_loop.time()
         with self.assertRaises(pymongo.errors.ConnectionFailure):
+            print_line()
             yield get_socket()
 
         # 100-millisecond timeout.
+        print_line()
         self.assertAlmostEqual(0.1, self.io_loop.time() - start, places=1)
         self.assertEqual(2, pool.motor_sock_counter)
 
         # Give a socket back to the pool, a waiter receives it.
         s1_future = get_socket()
         pool.maybe_return_socket(s1)
+        print_line()
         self.assertEqual(s1, (yield s1_future))
+        print_line()
         self.assertEqual(2, pool.motor_sock_counter)
 
         # max_pool_size * waitQueueMultiple = 6 waiters are allowed.
+        print_line()
         for _ in range(6):
             get_socket()
 
+        print_line()
         start = self.io_loop.time()
         with self.assertRaises(pymongo.errors.ConnectionFailure):
             yield get_socket()
 
         # Fails immediately.
+        print_line()
         self.assertAlmostEqual(0, self.io_loop.time() - start, places=2)
         self.assertEqual(2, pool.motor_sock_counter)
+        print_line()
         cx.close()
+        print_line()
 
     @gen_test
     def test_connections_unacknowledged_writes(self):
