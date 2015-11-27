@@ -375,7 +375,6 @@ class AgnosticBase(object):
         return NotImplemented
 
     # TODO: remove or make many of these readonly
-    name                            = ReadOnlyProperty()
     get_document_class              = DelegateMethod()
     set_document_class              = DelegateMethod()
     document_class                  = ReadWriteProperty()
@@ -384,6 +383,8 @@ class AgnosticBase(object):
     secondary_acceptable_latency_ms = ReadWriteProperty()
     write_concern                   = ReadWriteProperty()
     uuid_subtype                    = ReadWriteProperty()
+    address                         = ReadOnlyProperty()
+    name                            = ReadOnlyProperty()
     codec_options                   = ReadOnlyProperty()
     local_threshold_ms              = ReadOnlyProperty()
 
@@ -1027,31 +1028,43 @@ when performing updates. For example, here we use the
 
 .. mongodoc:: update"""
 
+
 class AgnosticCollection(AgnosticBase):
     __motor_class_name__ = 'MotorCollection'
     __delegate_class__ = Collection
 
-    create_index      = AsyncCommand()
-    drop_indexes      = AsyncCommand()
-    drop_index        = AsyncCommand()
-    drop              = AsyncCommand()
-    ensure_index      = AsyncCommand()
-    reindex           = AsyncCommand()
-    rename            = AsyncCommand()
-    find_and_modify   = AsyncCommand()
-    map_reduce        = AsyncCommand(doc=mr_doc).wrap(Collection)
-    update            = AsyncWrite(doc=update_doc)
-    insert            = AsyncWrite()
-    remove            = AsyncWrite()
-    save              = AsyncWrite()
-    index_information = AsyncRead()
-    count             = AsyncRead()
-    options           = AsyncRead()
-    group             = AsyncRead()
-    distinct          = AsyncRead()
-    inline_map_reduce = AsyncRead()
-    find_one          = AsyncRead()
-    full_name         = ReadOnlyProperty()
+    bulk_write              = AsyncCommand()
+    create_index            = AsyncCommand()
+    delete_one              = AsyncCommand()
+    delete_many             = AsyncCommand()
+    drop                    = AsyncCommand()
+    drop_index              = AsyncCommand()
+    drop_indexes            = AsyncCommand()
+    ensure_index            = AsyncCommand()
+    find_and_modify         = AsyncCommand()
+    find_one_and_delete     = AsyncCommand()
+    find_one_and_replace    = AsyncCommand()
+    find_one_and_update     = AsyncCommand()
+    insert_many             = AsyncCommand()
+    insert_one              = AsyncCommand()
+    map_reduce              = AsyncCommand(doc=mr_doc).wrap(Collection)
+    reindex                 = AsyncCommand()
+    rename                  = AsyncCommand()
+    replace_one             = AsyncCommand()
+    update_many             = AsyncCommand()
+    update_one              = AsyncCommand()
+    update                  = AsyncWrite(doc=update_doc)
+    insert                  = AsyncWrite()
+    remove                  = AsyncWrite()
+    save                    = AsyncWrite()
+    index_information       = AsyncRead()
+    count                   = AsyncRead()
+    options                 = AsyncRead()
+    group                   = AsyncRead()
+    distinct                = AsyncRead()
+    inline_map_reduce       = AsyncRead()
+    find_one                = AsyncRead()
+    full_name               = ReadOnlyProperty()
 
     _async_aggregate  = AsyncRead(attr_name='aggregate')
     __parallel_scan   = AsyncRead(attr_name='parallel_scan')
