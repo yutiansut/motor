@@ -356,7 +356,8 @@ class MongoClientBase(Synchro):
 
         if not self.delegate:
             self.delegate = self.__delegate_class__(*args, **kwargs)
-            if kwargs.get('_connect', True):
+            connect = kwargs.get('_connect', kwargs.get('connect', True))
+            if connect:
                 self.synchro_connect()
 
     def synchro_connect(self):
