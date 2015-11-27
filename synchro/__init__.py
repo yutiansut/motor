@@ -313,6 +313,7 @@ class Synchro(object):
 class MongoClientBase(Synchro):
     _cache_credentials = SynchroProperty()
     get_default_database = WrapOutgoing()
+    get_database = WrapOutgoing()
     max_pool_size = SynchroProperty()
     max_write_batch_size = SynchroProperty()
 
@@ -446,6 +447,8 @@ class MongoReplicaSetClient(MongoClientBase):
 class Database(Synchro):
     __delegate_class__ = motor.MotorDatabase
 
+    get_collection     = WrapOutgoing()
+
     def __init__(self, client, name):
         assert isinstance(client, (MongoClient, MongoReplicaSetClient)), (
             "Expected MongoClient or MongoReplicaSetClient, got %s"
@@ -478,6 +481,7 @@ class Collection(Synchro):
     find                            = WrapOutgoing()
     initialize_unordered_bulk_op    = WrapOutgoing()
     initialize_ordered_bulk_op      = WrapOutgoing()
+    with_options                    = WrapOutgoing()
 
     def __init__(self, database, name):
         if not isinstance(database, Database):
