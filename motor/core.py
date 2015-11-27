@@ -374,6 +374,7 @@ class AgnosticBase(object):
             return self.delegate == other.delegate
         return NotImplemented
 
+    # TODO: remove or make many of these readonly
     name                            = ReadOnlyProperty()
     get_document_class              = DelegateMethod()
     set_document_class              = DelegateMethod()
@@ -382,6 +383,9 @@ class AgnosticBase(object):
     tag_sets                        = ReadWriteProperty()
     secondary_acceptable_latency_ms = ReadWriteProperty()
     write_concern                   = ReadWriteProperty()
+    uuid_subtype                    = ReadWriteProperty()
+    codec_options                   = ReadOnlyProperty()
+    local_threshold_ms              = ReadOnlyProperty()
 
     def __init__(self, delegate):
         self.delegate = delegate
@@ -432,6 +436,52 @@ class AgnosticClientBase(AgnosticBase):
         return db_class(self, name)
 
     __getitem__ = __getattr__
+
+    def get_database(self, name, codec_options=None,
+                     read_preference=None, write_concern=None):
+        """Get a `MotorDatabase` with the given name and options.
+
+        Useful for creating a `MotorDatabase` with different codec options, read
+        preference, and/or write concern from this client.
+
+          >>> from pymongo import ReadPreference
+          >>> client.read_preference == ReadPreference.PRIMARY
+          True
+          >>> db1 = client.test
+          >>> db1.read_preference == ReadPreference.PRIMARY
+          True
+          >>> db2 = client.get_database(
+          ...     'test', read_preference=ReadPreference.SECONDARY)
+          >>> db2.read_preference == ReadPreference.SECONDARY
+          True
+
+        :Parameters:
+          - `name`: The name of the database - a string.
+          - `codec_options` (optional): An instance of
+            :class:`~bson.codec_options.CodecOptions`. If ``None`` (the
+            default) the :attr:`codec_options` of this :class:`MongoClient` is
+            used.
+          - `read_preference` (optional): The read preference to use. If
+            ``None`` (the default) the :attr:`read_preference` of this
+            client is used. See :mod:`~pymongo.read_preferences` for options.
+          - `write_concern` (optional): An instance of
+            :class:`~pymongo.write_concern.WriteConcern`. If ``None`` (the
+            default) the :attr:`write_concern` of this client is used.
+
+        .. versionadded:: 1.0
+        """
+        # A PyMongo Database.
+        delegate = self.delegate.get_database(name,
+                                              codec_options,
+                                              read_preference,
+                                              write_concern)
+
+        # A MotorDatabase.
+        db_class = create_class_with_framework(AgnosticDatabase,
+                                               self._framework,
+                                               self.__module__)
+
+        return db_class(self, name, delegate=delegate)
 
     def get_default_database(self):
         """Get the database named in the MongoDB connection URI.
@@ -758,14 +808,15 @@ class AgnosticDatabase(AgnosticBase):
     outgoing_manipulators         = ReadOnlyProperty()
     outgoing_copying_manipulators = ReadOnlyProperty()
 
-    def __init__(self, connection, name):
-        if not isinstance(connection, AgnosticClientBase):
-            raise TypeError("First argument to MotorDatabase must be "
-                            "a Motor client, not %r" % connection)
+    def __init__(self, connection, name, delegate=None):
+        if delegate is None:
+            if not isinstance(connection, AgnosticClientBase):
+                raise TypeError("First argument to MotorDatabase must be "
+                                "a Motor client, not %r" % connection)
 
-        self.connection = connection
-        delegate = Database(connection.delegate, name)
+            delegate = Database(connection.delegate, name)
         super(self.__class__, self).__init__(delegate)
+        self.connection = connection
 
     def __getattr__(self, name):
         collection_class = create_class_with_framework(
@@ -815,6 +866,54 @@ class AgnosticDatabase(AgnosticBase):
                 manipulator.database = db.delegate
 
         self.delegate.add_son_manipulator(manipulator)
+
+    def get_collection(self, name, codec_options=None,
+                       read_preference=None, write_concern=None):
+        """Get a `MotorCollection` with the given name and options.
+
+        Useful for creating a `MotorCollection` with different codec options,
+        read preference, and/or write concern from this `MotorDatabase`.
+
+          >>> from pymongo import ReadPreference
+          >>> db.read_preference == ReadPreference.PRIMARY
+          True
+          >>> coll1 = db.test
+          >>> coll1.read_preference == ReadPreference.PRIMARY
+          True
+          >>> coll2 = db.get_collection(
+          ...     'test', read_preference=ReadPreference.SECONDARY)
+          >>> coll2.read_preference == SECONDARY
+          True
+
+        :Parameters:
+          - `name`: The name of the collection - a string.
+          - `codec_options` (optional): An instance of
+            :class:`~bson.codec_options.CodecOptions`. If ``None`` (the
+            default) the :attr:`codec_options` of this :class:`Database` is
+            used.
+          - `read_preference` (optional): The read preference to use. If
+            ``None`` (the default) the :attr:`read_preference` of this
+            :class:`Database` is used. See :mod:`~pymongo.read_preferences`
+            for options.
+          - `write_concern` (optional): An instance of
+            :class:`~pymongo.write_concern.WriteConcern`. If ``None`` (the
+            default) the :attr:`write_concern` of this :class:`Database` is
+            used.
+
+        .. versionadded:: 1.0
+        """
+        # A PyMongo Collection.
+        delegate = self.delegate.get_collection(name,
+                                                codec_options,
+                                                read_preference,
+                                                write_concern)
+
+        # A MotorCollection or AsyncIOMotorCollection.
+        collection_class = create_class_with_framework(AgnosticCollection,
+                                                       self._framework,
+                                                       self.__module__)
+
+        return collection_class(self, name, delegate=delegate)
 
     def get_io_loop(self):
         return self.connection.get_io_loop()
@@ -952,21 +1051,22 @@ class AgnosticCollection(AgnosticBase):
     distinct          = AsyncRead()
     inline_map_reduce = AsyncRead()
     find_one          = AsyncRead()
-    uuid_subtype      = ReadWriteProperty()
     full_name         = ReadOnlyProperty()
 
     _async_aggregate  = AsyncRead(attr_name='aggregate')
     __parallel_scan   = AsyncRead(attr_name='parallel_scan')
 
-    def __init__(self, database, name):
-        db_class = create_class_with_framework(
-            AgnosticDatabase, self._framework, self.__module__)
+    def __init__(self, database, name, delegate=None):
+        if delegate is None:
+            db_class = create_class_with_framework(
+                AgnosticDatabase, self._framework, self.__module__)
 
-        if not isinstance(database, db_class):
-            raise TypeError("First argument to MotorCollection must be "
-                            "MotorDatabase, not %r" % database)
+            if not isinstance(database, db_class):
+                raise TypeError("First argument to MotorCollection must be "
+                                "MotorDatabase, not %r" % database)
 
-        delegate = Collection(database.delegate, name)
+            delegate = Collection(database.delegate, name)
+
         super(self.__class__, self).__init__(delegate)
         self.database = database
 
@@ -1182,6 +1282,41 @@ class AgnosticCollection(AgnosticBase):
             return command_cursor_class(obj, self)
         else:
             return obj
+
+    def with_options(
+            self, codec_options=None, read_preference=None, write_concern=None):
+        """Get a clone of this `MotorCollection` changing the specified settings.
+
+          >>> from pymongo import ReadPreference
+          >>> coll1.read_preference == ReadPreference.PRIMARY
+          True
+          >>> coll2 = coll1.with_options(read_preference=ReadPreference.SECONDARY)
+          >>> coll1.read_preference == ReadPreference.PRIMARY
+          True
+          >>> coll2.read_preference == ReadPreference.SECONDARY
+          True
+
+        :Parameters:
+          - `codec_options` (optional): An instance of
+            :class:`~bson.codec_options.CodecOptions`. If ``None`` (the
+            default) the :attr:`codec_options` of this :class:`Collection`
+            is used.
+          - `read_preference` (optional): The read preference to use. If
+            ``None`` (the default) the :attr:`read_preference` of this
+            :class:`Collection` is used. See :mod:`~pymongo.read_preferences`
+            for options.
+          - `write_concern` (optional): An instance of
+            :class:`~pymongo.write_concern.WriteConcern`. If ``None`` (the
+            default) the :attr:`write_concern` of this :class:`Collection`
+            is used.
+
+        .. versionadded:: 1.0
+        """
+        delegate = self.delegate.with_options(codec_options,
+                                              read_preference,
+                                              write_concern)
+
+        return self.__class__(self.database, self.name, delegate=delegate)
 
     def get_io_loop(self):
         return self.database.get_io_loop()

@@ -19,9 +19,12 @@ from __future__ import unicode_literals
 import unittest
 
 import pymongo.database
+from bson import JAVA_LEGACY, CodecOptions
 from pymongo.errors import OperationFailure, CollectionInvalid
+from pymongo.read_preferences import ReadPreference, Secondary
 from pymongo.son_manipulator import AutoReference, NamespaceInjector
 from tornado.testing import gen_test
+from pymongo.write_concern import WriteConcern
 
 import motor
 import test
@@ -217,6 +220,27 @@ class MotorDatabaseTest(MotorTest):
         self.assertTrue((yield db.validate_collection("test")))
         self.assertTrue((yield db.validate_collection(db.test)))
 
+    def test_get_collection(self):
+        codec_options = CodecOptions(tz_aware=True,
+                                     uuid_representation=JAVA_LEGACY)
+
+        write_concern = WriteConcern(w=2, j=True)
+        coll = self.db.get_collection(
+            'foo', codec_options, ReadPreference.SECONDARY, write_concern)
+        self.assertIsInstance(coll, motor.MotorCollection)
+        self.assertEqual('foo', coll.name)
+        self.assertEqual(codec_options, coll.codec_options)
+        self.assertEqual(JAVA_LEGACY, coll.uuid_subtype)
+        self.assertEqual(ReadPreference.SECONDARY, coll.read_preference)
+        self.assertEqual(write_concern.document, coll.write_concern)
+
+        pref = Secondary([{"dc": "sf"}])
+        coll = self.db.get_collection('foo', read_preference=pref)
+        self.assertEqual(pref.mode, coll.read_preference)
+        self.assertEqual(pref.tag_sets, coll.tag_sets)
+        self.assertEqual(self.db.codec_options, coll.codec_options)
+        self.assertEqual(self.db.uuid_subtype, coll.uuid_subtype)
+        self.assertEqual(self.db.write_concern, coll.write_concern)
 
 if __name__ == '__main__':
     unittest.main()

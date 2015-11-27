@@ -20,9 +20,14 @@ import unittest
 from unittest import SkipTest
 
 import pymongo
+from bson.codec_options import CodecOptions
+from bson.binary import JAVA_LEGACY, PYTHON_LEGACY
 from mockupdb import OpQuery
-from pymongo.errors import ConnectionFailure, ConfigurationError
-from pymongo.errors import OperationFailure
+from pymongo.errors import (ConfigurationError,
+                            ConnectionFailure,
+                            OperationFailure)
+from pymongo.read_preferences import ReadPreference, Secondary
+from pymongo.write_concern import WriteConcern
 
 from motor import motor_asyncio
 
@@ -249,6 +254,30 @@ class TestAsyncIOClient(AsyncIOTestCase):
         yield from client.server_info()
         ka = client._get_primary_pool()._motor_socket_options.socket_keepalive
         self.assertTrue(ka)
+
+    def test_get_database(self):
+        codec_options = CodecOptions(tz_aware=True,
+                                     uuid_representation=JAVA_LEGACY)
+
+        write_concern = WriteConcern(w=2, j=True)
+        db = self.cx.get_database('foo', codec_options,
+                                  ReadPreference.SECONDARY, write_concern)
+
+        self.assertIsInstance(db, motor_asyncio.AsyncIOMotorDatabase)
+        self.assertEqual('foo', db.name)
+        self.assertEqual(codec_options, db.codec_options)
+        self.assertEqual(JAVA_LEGACY, db.uuid_subtype)
+        self.assertEqual(ReadPreference.SECONDARY, db.read_preference)
+        self.assertEqual([{}], db.tag_sets)
+        self.assertEqual(write_concern.document, db.write_concern)
+
+        pref = Secondary([{"dc": "sf"}])
+        db = self.cx.get_database('foo', read_preference=pref)
+        self.assertEqual(pref.mode, db.read_preference)
+        self.assertEqual(pref.tag_sets, db.tag_sets)
+        self.assertEqual({}, db.write_concern)
+        self.assertEqual(CodecOptions(), db.codec_options)
+        self.assertEqual(PYTHON_LEGACY, db.uuid_subtype)
 
 
 class TestAsyncIOClientTimeout(AsyncIOMockServerTestCase):

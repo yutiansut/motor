@@ -24,7 +24,11 @@ import unittest
 import pymongo
 import pymongo.mongo_client
 import tornado
+from bson import JAVA_LEGACY, CodecOptions
+from bson.binary import PYTHON_LEGACY
 from mockupdb import OpQuery
+from pymongo.write_concern import WriteConcern
+from pymongo.read_preferences import Secondary, ReadPreference
 from pymongo.errors import ConfigurationError, OperationFailure
 from pymongo.errors import ConnectionFailure
 from tornado import gen, version_info as tornado_version
@@ -240,6 +244,30 @@ class MotorClientTest(MotorTest):
         yield client.server_info()
         ka = client._get_primary_pool()._motor_socket_options.socket_keepalive
         self.assertTrue(ka)
+        
+    def test_get_database(self):
+        codec_options = CodecOptions(tz_aware=True,
+                                     uuid_representation=JAVA_LEGACY)
+
+        write_concern = WriteConcern(w=2, j=True)
+        db = self.cx.get_database('foo', codec_options,
+                                  ReadPreference.SECONDARY, write_concern)
+
+        self.assertIsInstance(db, motor.MotorDatabase)
+        self.assertEqual('foo', db.name)
+        self.assertEqual(codec_options, db.codec_options)
+        self.assertEqual(JAVA_LEGACY, db.uuid_subtype)
+        self.assertEqual(ReadPreference.SECONDARY, db.read_preference)
+        self.assertEqual([{}], db.tag_sets)
+        self.assertEqual(write_concern.document, db.write_concern)
+
+        pref = Secondary([{"dc": "sf"}])
+        db = self.cx.get_database('foo', read_preference=pref)
+        self.assertEqual(pref.mode, db.read_preference)
+        self.assertEqual(pref.tag_sets, db.tag_sets)
+        self.assertEqual({}, db.write_concern)
+        self.assertEqual(CodecOptions(), db.codec_options)
+        self.assertEqual(PYTHON_LEGACY, db.uuid_subtype)
 
 
 class MotorClientTimeoutTest(MotorMockServerTest):

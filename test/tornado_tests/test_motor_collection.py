@@ -19,8 +19,11 @@ from __future__ import unicode_literals
 import unittest
 
 import bson
+from bson.binary import JAVA_LEGACY
+from bson.codec_options import CodecOptions
 from bson.objectid import ObjectId
-from pymongo import ReadPreference
+from pymongo import ReadPreference, WriteConcern
+from pymongo.read_preferences import Secondary
 from pymongo.errors import DuplicateKeyError, InvalidOperation
 from tornado import gen
 from tornado.concurrent import Future
@@ -484,6 +487,29 @@ class MotorCollectionTest(MotorTest):
         cursors = yield collection.parallel_scan(3)
         yield [f(cursor) for cursor in cursors]
         self.assertEqual(len(docs), (yield collection.count()))
+
+    def test_with_options(self):
+        codec_options = CodecOptions(
+            tz_aware=True, uuid_representation=JAVA_LEGACY)
+        write_concern = WriteConcern(w=2, j=True)
+        c2 = self.collection.with_options(codec_options,
+                                          ReadPreference.SECONDARY,
+                                          write_concern)
+
+        self.assertIsInstance(c2, motor.MotorCollection)
+        self.assertEqual(codec_options, c2.codec_options)
+        self.assertEqual(JAVA_LEGACY, c2.uuid_subtype)
+        self.assertEqual(ReadPreference.SECONDARY, c2.read_preference)
+        self.assertEqual(write_concern.document, c2.write_concern)
+
+        pref = Secondary([{"dc": "sf"}])
+        c2 = self.collection.with_options(read_preference=pref)
+        self.assertIsInstance(c2, motor.MotorCollection)
+        self.assertEqual(pref.mode, c2.read_preference)
+        self.assertEqual(pref.tag_sets, c2.tag_sets)
+        self.assertEqual(self.collection.codec_options, c2.codec_options)
+        self.assertEqual(self.collection.uuid_subtype, c2.uuid_subtype)
+        self.assertEqual(self.collection.write_concern, c2.write_concern)
 
 if __name__ == '__main__':
     unittest.main()
