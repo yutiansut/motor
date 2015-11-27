@@ -80,6 +80,7 @@ class MotorPool(object):
             ssl_certfile=None,
             ssl_cert_reqs=None,
             ssl_ca_certs=None,
+            ssl_match_hostname=None,
             wait_queue_timeout=None,
             wait_queue_multiple=None,
             socket_keepalive=False):
@@ -89,41 +90,11 @@ class MotorPool(object):
         :Parameters:
           - `io_loop`: An IOLoop instance
           - `framework`: An asynchronous framework
-          - `pair`: a (hostname, port) tuple
-          - `max_size`: The maximum number of open sockets. Calls to
-            `get_socket` will block if this is set, this pool has opened
-            `max_size` sockets, and there are none idle. Set to `None` to
-             disable.
-          - `net_timeout`: timeout in seconds for operations on open connection
-          - `conn_timeout`: timeout in seconds for establishing connection
-          - `use_ssl`: bool, if True use an encrypted connection
-          - `use_greenlets`: ignored.
-          - `ssl_keyfile`: The private keyfile used to identify the local
-            connection against mongod.  If included with the ``certfile` then
-            only the ``ssl_certfile`` is needed.  Implies ``ssl=True``.
-          - `ssl_certfile`: The certificate file used to identify the local
-            connection against mongod. Implies ``ssl=True``.
-          - `ssl_cert_reqs`: Specifies whether a certificate is required from
-            the other side of the connection, and whether it will be validated
-            if provided. It must be one of the three values ``ssl.CERT_NONE``
-            (certificates ignored), ``ssl.CERT_OPTIONAL``
-            (not required, but validated if provided), or ``ssl.CERT_REQUIRED``
-            (required and validated). If the value of this parameter is not
-            ``ssl.CERT_NONE``, then the ``ssl_ca_certs`` parameter must point
-            to a file of CA certificates. Implies ``ssl=True``.
-          - `ssl_ca_certs`: The ca_certs file contains a set of concatenated
-            "certification authority" certificates, which are used to validate
-            certificates passed from the other end of the connection.
-            Implies ``ssl=True``.
-          - `wait_queue_timeout`: (integer) How long (in milliseconds) a
-            callback will wait for a socket from the pool if the pool has no
-            free sockets.
-          - `wait_queue_multiple`: (integer) Multiplied by max_pool_size to
-            give the number of callbacks allowed to wait for a socket at one
-            time.
-          - `socket_keepalive`: (boolean) Whether to send periodic keep-alive
-            packets on connected sockets. Defaults to ``False`` (do not send
-            keep-alive packets).
+
+        Other parameters are the same as PyMongo Pool's.
+
+        .. versionchanged:: 1.0
+           ``ssl_match_hostname`` added.
 
         .. versionchanged:: 0.2
            ``max_size`` is now a hard cap. ``wait_queue_timeout`` and
