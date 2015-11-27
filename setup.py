@@ -147,7 +147,7 @@ setup(name='motor',
       url='https://github.com/mongodb/motor/',
       install_requires=[
           'greenlet >= 0.4.0',
-          'pymongo == 2.8.0',
+          'pymongo >= 2.9,<3',
       ],
       license='http://www.apache.org/licenses/LICENSE-2.0',
       classifiers=filter(None, classifiers.split('\n')),

@@ -184,9 +184,9 @@ autodoc_default_flags = ['inherited-members']
 autodoc_member_order = 'groupwise'
 
 intersphinx_mapping = {
-    'bson': ('http://api.mongodb.org/python/2.8/', None),
-    'gridfs': ('http://api.mongodb.org/python/2.8/', None),
-    'pymongo': ('http://api.mongodb.org/python/2.8/', None),
+    'bson': ('http://api.mongodb.org/python/2.9/', None),
+    'gridfs': ('http://api.mongodb.org/python/2.9/', None),
+    'pymongo': ('http://api.mongodb.org/python/2.9/', None),
     'tornado': ('http://www.tornadoweb.org/en/stable/', None),
     'python': ('https://docs.python.org/3/', None),
 }
