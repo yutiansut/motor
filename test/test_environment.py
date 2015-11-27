@@ -85,7 +85,6 @@ class TestEnvironment(object):
         self.arbiters = None
         self.primary = None
         self.secondaries = None
-        self.v8 = False
         self.auth = False
         self.user_provided = False
         self.uri = None
@@ -97,7 +96,6 @@ class TestEnvironment(object):
         self.setup_auth()
         self.setup_mongos()
         self.setup_rs()
-        self.setup_v8()
         self.initialized = True
 
     def teardown(self):
@@ -212,11 +210,6 @@ class TestEnvironment(object):
             self.secondaries = [
                 _partition_node(m['name']) for m in repl_set_status['members']
                 if m['stateStr'] == 'SECONDARY']
-
-    def setup_v8(self):
-        """Determine if server is running SpiderMonkey or V8."""
-        if self.sync_cx.server_info().get('javascriptEngine') == 'V8':
-            self.v8 = True
 
 
 env = TestEnvironment()

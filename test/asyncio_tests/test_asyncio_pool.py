@@ -41,9 +41,6 @@ class AIOMotorPoolTest(AsyncIOTestCase):
 
     @asyncio_test(timeout=30)
     def test_max_size(self):
-        if not test.env.v8:
-            raise SkipTest("Need multithreaded Javascript in mongod for test")
-
         max_pool_size = 5
         cx = self.asyncio_client(max_pool_size=max_pool_size)
 
