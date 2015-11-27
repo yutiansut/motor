@@ -271,6 +271,7 @@ pymongo_modules = set([
     'pymongo.member',
     'pymongo.mongo_client',
     'pymongo.mongo_replica_set_client',
+    'pymongo.operations',
     'pymongo.pool',
     'pymongo.read_preferences',
     'pymongo.replica_set_connection',
@@ -278,6 +279,7 @@ pymongo_modules = set([
     'pymongo.ssl_match_hostname',
     'pymongo.thread_util',
     'pymongo.uri_parser',
+    'pymongo.write_concern',
 ])
 
 

@@ -50,10 +50,12 @@ from pymongo.cursor import *
 from pymongo.cursor import _QUERY_OPTIONS
 from pymongo.errors import *
 from pymongo.member import PRIMARY, SECONDARY, OTHER
+from pymongo.operations import *
 from pymongo.read_preferences import *
 from pymongo.son_manipulator import *
 from pymongo.uri_parser import *
 from pymongo.uri_parser import _partition, _rpartition
+from pymongo.write_concern import *
 from pymongo import auth
 from pymongo.auth import *
 from pymongo.auth import _password_digest
