@@ -71,6 +71,9 @@ excluded_tests = [
     'TestCollection.test_aggregation_cursor',
     'TestCollection.test_aggregation_cursor_validation',
 
+    # Accesses private method.
+    'TestCollection.test_message_backport_codec_options',
+
     # Motor always uses greenlets.
     '*.test_use_greenlets',
 
