@@ -3,6 +3,20 @@ Changelog
 
 .. currentmodule:: motor.motor_tornado
 
+Motor 0.6
+---------
+
+Introduce what will be the Motor 1.0 API, and deprecate APIs that will be
+removed in 1.0. This version is a bridge to help you port your application
+from the existing Motor API to the eventual stable one.
+
+PyMongo's API was updated substantially in version 3.0, and PyMongo 2.9 was
+introduced as a bridge version, with the 3.0 API implemented alongside the 2.0
+API. Obsolete PyMongo 2 APIs give deprecation warnings in 2.9.
+
+Motor 0.6 is an analogous release: it wraps PyMongo 2.9, implements all of the
+future Motor 1.0 API, and deprecates all APIs scheduled for removal.
+
 Motor 0.5
 ---------
 
