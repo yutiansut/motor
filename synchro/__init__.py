@@ -101,11 +101,12 @@ def wrap_synchro(fn):
         if isinstance(motor_obj, motor.MotorCollection):
             client = MongoClient(delegate=motor_obj.database.connection)
             database = Database(client, motor_obj.database.name)
-            return Collection(database, motor_obj.name)
+            return Collection(database, motor_obj.name, delegate=motor_obj)
         if isinstance(motor_obj, motor.MotorDatabase):
             client = MongoClient(delegate=motor_obj.connection)
-            return Database(client, motor_obj.name)
-        if isinstance(motor_obj, motor.motor_tornado.MotorCommandCursor):
+            return Database(client, motor_obj.name, delegate=motor_obj)
+        if isinstance(motor_obj, (motor.motor_tornado.MotorCommandCursor,
+                                  motor.motor_tornado.MotorAggregationCursor)):
             return CommandCursor(motor_obj)
         if isinstance(motor_obj, motor.motor_tornado.MotorCursor):
             return Cursor(motor_obj)
@@ -450,17 +451,21 @@ class Database(Synchro):
 
     get_collection     = WrapOutgoing()
 
-    def __init__(self, client, name):
+    def __init__(self, client, name, delegate=None):
         assert isinstance(client, (MongoClient, MongoReplicaSetClient)), (
             "Expected MongoClient or MongoReplicaSetClient, got %s"
             % repr(client))
 
-        self.connection = client
+        self.connection = self.client = client
 
-        self.delegate = client.delegate[name]
-        assert isinstance(self.delegate, motor.MotorDatabase), (
+        if delegate is None:
+            delegate = client.delegate[name]
+
+        assert isinstance(delegate, motor.MotorDatabase), (
             "synchro.Database delegate must be MotorDatabase, not "
-            " %s" % repr(self.delegate))
+            " %s" % repr(delegate))
+
+        self.delegate = delegate
 
     def add_son_manipulator(self, manipulator):
         if isinstance(manipulator, son_manipulator.AutoReference):
@@ -479,24 +484,29 @@ class Database(Synchro):
 class Collection(Synchro):
     __delegate_class__ = motor.MotorCollection
 
+    aggregate                       = WrapOutgoing()
     find                            = WrapOutgoing()
     initialize_unordered_bulk_op    = WrapOutgoing()
     initialize_ordered_bulk_op      = WrapOutgoing()
     with_options                    = WrapOutgoing()
 
-    def __init__(self, database, name):
+    def __init__(self, database, name, delegate=None):
         if not isinstance(database, Database):
             raise TypeError(
                 "First argument to synchro Collection must be synchro "
                 "Database, not %s" % repr(database))
 
         self.database = database
-        self.delegate = database.delegate[name]
 
-        if not isinstance(self.delegate, motor.MotorCollection):
+        if delegate is None:
+            delegate = database.delegate[name]
+
+        if not isinstance(delegate, motor.MotorCollection):
             raise TypeError(
                 "Expected to get synchro Collection from Database,"
-                " got %s" % repr(self.delegate))
+                " got %s" % repr(delegate))
+
+        self.delegate = delegate
 
     def __getattr__(self, name):
         # Access to collections with dotted names, like db.test.mike
@@ -534,7 +544,7 @@ class Cursor(Synchro):
         if cursor._buffer_size():
             return cursor.next_object()
         elif cursor.alive:
-            self.synchronize(cursor._refresh)()
+            self.synchronize(cursor._get_more)()
             if cursor._buffer_size():
                 return cursor.next_object()
 
