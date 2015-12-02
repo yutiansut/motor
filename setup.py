@@ -137,9 +137,16 @@ class test(Command):
         sys.exit(not result.wasSuccessful())
 
 
+packages = ['motor', 'motor.frameworks.tornado']
+
+if sys.version_info[0] >= 3:
+    # Trying to install and byte-compile motor/frameworks/asyncio/__init__.py
+    # causes SyntaxError in Python 2.
+    packages.append('motor.frameworks.asyncio')
+
 setup(name='motor',
       version='0.5.1.dev0',
-      packages=['motor', 'motor.frameworks'],
+      packages=packages,
       description=description,
       long_description=long_description,
       author='A. Jesse Jiryu Davis',
