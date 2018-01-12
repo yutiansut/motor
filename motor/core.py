@@ -1,4 +1,4 @@
-# Copyright 2011-2015 MongoDB, Inc.
+# Copyright 2011-present MongoDB, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import pymongo.son_manipulator
 
 from pymongo.bulk import BulkOperationBuilder
 from pymongo.database import Database
+from pymongo.change_stream import ChangeStream
 from pymongo.collection import Collection
 from pymongo.cursor import Cursor, _QUERY_OPTIONS
 from pymongo.command_cursor import CommandCursor
@@ -54,7 +55,6 @@ except ImportError:
     ssl = None
     HAS_SSL = False
 
-PY352 = sys.version_info >= (3, 5, 2)
 PY35 = sys.version_info >= (3, 5)
 
 
@@ -98,6 +98,8 @@ class AgnosticClient(AgnosticBaseProperties):
     is_mongos                = ReadOnlyProperty()
     is_primary               = ReadOnlyProperty()
     kill_cursors             = AsyncCommand()
+    list_databases           = AsyncRead().wrap(CommandCursor)
+    list_database_names      = AsyncRead()
     local_threshold_ms       = ReadOnlyProperty()
     max_bson_size            = ReadOnlyProperty()
     max_idle_time_ms         = ReadOnlyProperty()
@@ -109,9 +111,11 @@ class AgnosticClient(AgnosticBaseProperties):
     PORT                     = ReadOnlyProperty()
     primary                  = ReadOnlyProperty()
     read_concern             = ReadOnlyProperty()
+    retry_writes             = ReadOnlyProperty()
     secondaries              = ReadOnlyProperty()
     server_info              = AsyncRead()
     server_selection_timeout = ReadOnlyProperty()
+    start_session            = AsyncRead(doc=start_session_doc)
     unlock                   = AsyncCommand()
 
     def __init__(self, *args, **kwargs):
@@ -157,41 +161,50 @@ class AgnosticClient(AgnosticBaseProperties):
 
         return db_class(self, name)
 
-    def wrap(self, db):
-        # Replace pymongo.database.Database with MotorDatabase.
-        db_class = create_class_with_framework(
-            AgnosticDatabase,
-            self._framework,
-            self.__module__)
+    def wrap(self, obj):
+        if obj.__class__ == Database:
+            db_class = create_class_with_framework(
+                AgnosticDatabase,
+                self._framework,
+                self.__module__)
 
-        return db_class(self, db.name, _delegate=db)
+            return db_class(self, obj.name, _delegate=obj)
+        elif obj.__class__ == CommandCursor:
+            command_cursor_class = create_class_with_framework(
+                AgnosticCommandCursor,
+                self._framework,
+                self.__module__)
+
+            return command_cursor_class(obj, self)
 
 
 class AgnosticDatabase(AgnosticBaseProperties):
     __motor_class_name__ = 'MotorDatabase'
     __delegate_class__ = Database
 
-    add_user            = AsyncCommand()
-    authenticate        = AsyncCommand()
-    collection_names    = AsyncRead()
-    command             = AsyncCommand(doc=cmd_doc)
-    create_collection   = AsyncCommand().wrap(Collection)
-    current_op          = AsyncRead()
-    dereference         = AsyncRead()
-    drop_collection     = AsyncCommand().unwrap('MotorCollection')
-    error               = AsyncRead(doc="OBSOLETE")
-    eval                = AsyncCommand()
-    get_collection      = DelegateMethod().wrap(Collection)
-    last_status         = AsyncRead(doc="OBSOLETE")
-    logout              = AsyncCommand()
-    name                = ReadOnlyProperty()
-    previous_error      = AsyncRead(doc="OBSOLETE")
-    profiling_info      = AsyncRead()
-    profiling_level     = AsyncRead()
-    remove_user         = AsyncCommand()
-    reset_error_history = AsyncCommand(doc="OBSOLETE")
-    set_profiling_level = AsyncCommand()
-    validate_collection = AsyncRead().unwrap('MotorCollection')
+    add_user              = AsyncCommand()
+    authenticate          = AsyncCommand()
+    collection_names      = AsyncRead()
+    command               = AsyncCommand(doc=cmd_doc)
+    create_collection     = AsyncCommand().wrap(Collection)
+    current_op            = AsyncRead()
+    dereference           = AsyncRead()
+    drop_collection       = AsyncCommand().unwrap('MotorCollection')
+    error                 = AsyncRead(doc="OBSOLETE")
+    eval                  = AsyncCommand()
+    get_collection        = DelegateMethod().wrap(Collection)
+    last_status           = AsyncRead(doc="OBSOLETE")
+    list_collection_names = AsyncRead()
+    list_collections      = AsyncRead()
+    logout                = AsyncCommand()
+    name                  = ReadOnlyProperty()
+    previous_error        = AsyncRead(doc="OBSOLETE")
+    profiling_info        = AsyncRead()
+    profiling_level       = AsyncRead()
+    remove_user           = AsyncCommand()
+    reset_error_history   = AsyncCommand(doc="OBSOLETE")
+    set_profiling_level   = AsyncCommand()
+    validate_collection   = AsyncRead().unwrap('MotorCollection')
 
     incoming_manipulators         = ReadOnlyProperty()
     incoming_copying_manipulators = ReadOnlyProperty()
@@ -389,6 +402,9 @@ class AgnosticCollection(AgnosticBaseProperties):
 
         :Parameters:
           - `pipeline`: a single command or list of aggregation commands
+          - `session` (optional): a
+            :class:`~pymongo.client_session.ClientSession`, created with
+            :meth:`~MotorClient.start_session`.
           - `**kwargs`: send arbitrary parameters to the aggregate command
 
         Returns a :class:`MotorCommandCursor` that can be iterated like a
@@ -438,7 +454,132 @@ class AgnosticCollection(AgnosticBaseProperties):
             # Latent cursor that will send initial command on first "async for".
             return cursor_class(self, self._async_aggregate, pipeline, **kwargs)
 
-    def list_indexes(self):
+    def watch(self, pipeline=None, full_document='default', resume_after=None,
+              max_await_time_ms=None, batch_size=None, collation=None,
+              session=None):
+        """Watch changes on this collection.
+
+        Returns a :class:`~MotorChangeStream` cursor which iterates over changes
+        on this collection. Introduced in MongoDB 3.6.
+
+        A change stream continues waiting indefinitely for matching change
+        events. Code like the following allows a program to cancel the change
+        stream and exit.
+
+        .. code-block:: python3
+
+          change_stream = None
+
+          async def watch_collection():
+              global change_stream
+
+              # Using the change stream in an "async with" block
+              # ensures it is canceled promptly if your code breaks
+              # from the loop or throws an exception.
+              async with db.collection.watch() as change_stream:
+                  async for change in stream:
+                      print(change)
+
+          # Tornado
+          from tornado.ioloop import IOLoop
+
+          def main():
+              loop = IOLoop.current()
+              # Start watching collection for changes.
+              loop.add_callback(watch_collection)
+              try:
+                  loop.start()
+              except KeyboardInterrupt:
+                  pass
+              finally:
+                  if change_stream is not None:
+                      change_stream.close()
+
+          # asyncio
+          from asyncio import get_event_loop
+
+          def main():
+              loop = get_event_loop()
+              task = loop.create_task(watch_collection)
+
+              try:
+                  loop.run_forever()
+              except KeyboardInterrupt:
+                  pass
+              finally:
+                  if change_stream is not None:
+                      change_stream.close()
+
+                  # Prevent "Task was destroyed but it is pending!"
+                  loop.run_until_complete(task)
+
+        The :class:`~MotorChangeStream` async iterable blocks
+        until the next change document is returned or an error is raised. If
+        the :meth:`~MotorChangeStream.next` method encounters
+        a network error when retrieving a batch from the server, it will
+        automatically attempt to recreate the cursor such that no change
+        events are missed. Any error encountered during the resume attempt
+        indicates there may be an outage and will be raised.
+
+        .. code-block:: python3
+
+            try:
+                pipeline = [{'$match': {'operationType': 'insert'}}]
+                async with db.collection.watch(pipeline) as stream:
+                    async for change in stream:
+                        print(change)
+            except pymongo.errors.PyMongoError:
+                # The ChangeStream encountered an unrecoverable error or the
+                # resume attempt failed to recreate the cursor.
+                logging.error('...')
+
+        For a precise description of the resume process see the
+        `change streams specification`_.
+
+        :Parameters:
+          - `pipeline` (optional): A list of aggregation pipeline stages to
+            append to an initial ``$changeStream`` stage. Not all
+            pipeline stages are valid after a ``$changeStream`` stage, see the
+            MongoDB documentation on change streams for the supported stages.
+          - `full_document` (optional): The fullDocument option to pass
+            to the ``$changeStream`` stage. Allowed values: 'default',
+            'updateLookup'.  Defaults to 'default'.
+            When set to 'updateLookup', the change notification for partial
+            updates will include both a delta describing the changes to the
+            document, as well as a copy of the entire document that was
+            changed from some time after the change occurred.
+          - `resume_after` (optional): The logical starting point for this
+            change stream.
+          - `max_await_time_ms` (optional): The maximum time in milliseconds
+            for the server to wait for changes before responding to a getMore
+            operation.
+          - `batch_size` (optional): The maximum number of documents to return
+            per batch.
+          - `collation` (optional): The :class:`~pymongo.collation.Collation`
+            to use for the aggregation.
+          - `session` (optional): a
+            :class:`~pymongo.client_session.ClientSession`.
+
+        :Returns:
+          A :class:`~MotorChangeStream`.
+
+        See the :ref:`tornado_change_stream_example`.
+
+        .. versionadded:: 1.2
+
+        .. mongodoc:: changeStreams
+
+        .. _change streams specification:
+            https://github.com/mongodb/specifications/blob/master/source/change-streams.rst
+        """
+        cursor_class = create_class_with_framework(
+            AgnosticChangeStream, self._framework, self.__module__)
+
+        # Latent cursor that will send initial command on first "async for".
+        return cursor_class(self, pipeline, full_document, resume_after,
+                            max_await_time_ms, batch_size, collation, session)
+
+    def list_indexes(self, session=None):
         """Get a cursor over the index documents for this collection. ::
 
           async def print_indexes():
@@ -453,7 +594,7 @@ class AgnosticCollection(AgnosticBaseProperties):
             AgnosticLatentCommandCursor, self._framework, self.__module__)
 
         # Latent cursor that will send initial command on first "async for".
-        return cursor_class(self, self._async_list_indexes)
+        return cursor_class(self, self._async_list_indexes, session=session)
 
     def parallel_scan(self, num_cursors, **kwargs):
         """Scan this entire collection in parallel.
@@ -486,6 +627,9 @@ class AgnosticCollection(AgnosticBaseProperties):
 
         :Parameters:
           - `num_cursors`: the number of cursors to return
+          - `session` (optional): a
+            :class:`~pymongo.client_session.ClientSession`, created with
+            :meth:`~MotorClient.start_session`.
 
         .. note:: Requires server version **>= 2.5.5**.
         """
@@ -590,6 +734,13 @@ class AgnosticCollection(AgnosticBaseProperties):
                 self.__module__)
 
             return command_cursor_class(obj, self)
+        elif obj.__class__ is ChangeStream:
+            change_stream_class = create_class_with_framework(
+                AgnosticChangeStream,
+                self._framework,
+                self.__module__)
+
+            return change_stream_class(obj, self)
         else:
             return obj
 
@@ -604,6 +755,7 @@ class AgnosticBaseCursor(AgnosticBase):
     cursor_id     = ReadOnlyProperty()
     alive         = ReadOnlyProperty()
     batch_size    = MotorCursorChainingMethod()
+    session       = ReadOnlyProperty()
 
     def __init__(self, cursor, collection):
         """Don't construct a cursor yourself, but acquire one from methods like
@@ -623,22 +775,9 @@ class AgnosticBaseCursor(AgnosticBase):
         self.closed = False
 
     # python.org/dev/peps/pep-0492/#api-design-and-implementation-revisions
-    if PY352:
+    if PY35:
         exec(textwrap.dedent("""
         def __aiter__(self):
-            return self
-
-        async def __anext__(self):
-            # An optimization: skip the "await" if possible.
-            if self._buffer_size() or await self.fetch_next:
-                return self.next_object()
-            raise StopAsyncIteration()
-        """), globals(), locals())
-
-    elif PY35:
-        # In Python 3.5.0 and 3.5.1, __aiter__ is a coroutine.
-        exec(textwrap.dedent("""
-        async def __aiter__(self):
             return self
 
         async def __anext__(self):
@@ -1122,3 +1261,99 @@ class AgnosticBulkOperationBuilder(AgnosticBase):
 
     def get_io_loop(self):
         return self.io_loop
+
+
+class AgnosticChangeStream(AgnosticBase):
+    """A change stream cursor.
+
+    Should not be called directly by application developers. See
+    :meth:`~MotorCollection.watch` for example usage.
+
+    .. versionadded: 1.2
+    .. mongodoc:: changeStreams
+    """
+    __delegate_class__ = ChangeStream
+    __motor_class_name__ = 'MotorChangeStream'
+
+    _close = AsyncCommand(attr_name='close')
+
+    def __init__(self, collection, pipeline, full_document, resume_after,
+                 max_await_time_ms, batch_size, collation, session):
+        super(self.__class__, self).__init__(delegate=None)
+        self._collection = collection
+        self._kwargs = {'pipeline': pipeline,
+                        'full_document': full_document,
+                        'resume_after': resume_after,
+                        'max_await_time_ms': max_await_time_ms,
+                        'batch_size': batch_size,
+                        'collation': collation,
+                        'session': session}
+
+    def _next(self):
+        # This method is run on a thread.
+        try:
+            if not self.delegate:
+                self.delegate = self._collection.delegate.watch(**self._kwargs)
+
+            return self.delegate.next()
+        except StopIteration:
+            raise StopAsyncIteration()
+
+    @coroutine_annotation(callback=False)
+    def next(self):
+        """Advance the cursor.
+
+        This method blocks until the next change document is returned or an
+        unrecoverable error is raised.
+
+        Raises :exc:`StopAsyncIteration` if this change stream is closed.
+
+        You can iterate the change stream by calling
+        ``await change_stream.next()`` repeatedly, or with an "async for" loop:
+
+        .. code-block:: python3
+
+          async for change in db.collection.watch():
+              print(change)
+
+        """
+        loop = self.get_io_loop()
+        return self._framework.run_on_executor(loop, self._next)
+
+    @coroutine_annotation(callback=False)
+    def close(self):
+        """Close this change stream.
+
+        Stops any "async for" loops using this change stream.
+        """
+        if self.delegate:
+            return self._close()
+
+        # Never started.
+        future = self._framework.get_future(self.get_io_loop())
+        future.set_result(None)
+        return future
+
+    if PY35:
+        exec(textwrap.dedent("""
+        async def __aiter__(self):
+            return self
+
+        __anext__ = next
+
+        async def __aenter__(self):
+            return self
+    
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            if self.delegate:
+                self.delegate.close() 
+        """), globals(), locals())
+
+    def get_io_loop(self):
+        return self._collection.get_io_loop()
+
+    def __enter__(self):
+        raise RuntimeError('Use a change stream in "async with", not "with"')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass

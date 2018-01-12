@@ -35,8 +35,7 @@ import motor
 import test
 from test import SkipTest
 from test.test_environment import db_user, db_password, env
-from test.tornado_tests import (at_least,
-                                MotorMockServerTest,
+from test.tornado_tests import (MotorMockServerTest,
                                 MotorTest,
                                 remove_all_users)
 from test.utils import one, get_primary_pool
@@ -135,10 +134,6 @@ class MotorClientTest(MotorTest):
 
     @gen_test(timeout=60)
     def test_high_concurrency(self):
-        if env.mongod_started_with_ssl:
-            if not (yield at_least(self.cx, (2, 6))):
-                raise SkipTest("Concurrent SSL is unreliable in 2.4")
-
         yield self.make_test_data()
 
         concurrency = 25
@@ -227,6 +222,27 @@ class MotorClientTest(MotorTest):
         self.assertEqual(ReadPreference.SECONDARY, db.read_preference)
         self.assertEqual(write_concern, db.write_concern)
 
+    @gen_test
+    def test_list_databases(self):
+        yield self.collection.insert_one({})
+        cursor = yield self.cx.list_databases()
+        self.assertIsInstance(cursor, motor.motor_tornado.MotorCommandCursor)
+
+        # Make sure the cursor works, by searching for "local" database.
+        while (yield cursor.fetch_next):
+            info = cursor.next_object()
+            if info['name'] == self.collection.database.name:
+                break
+        else:
+            self.fail("'%s' database not found" % self.collection.database.name)
+
+    @gen_test
+    def test_list_database_names(self):
+        yield self.collection.insert_one({})
+        names = yield self.cx.list_database_names()
+        self.assertIsInstance(names, list)
+        self.assertIn(self.collection.database.name, names)
+
 
 class MotorClientTimeoutTest(MotorMockServerTest):
     @gen_test
@@ -246,7 +262,8 @@ class MotorClientExhaustCursorTest(MotorMockServerTest):
         primary = self.server()
         hosts = [primary.address_string]
         primary.autoresponds(
-            'ismaster', ismaster=True, setName='rs', hosts=hosts)
+            'ismaster', ismaster=True, setName='rs', hosts=hosts,
+            maxWireVersion=6)
 
         return primary
 

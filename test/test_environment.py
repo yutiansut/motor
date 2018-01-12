@@ -16,10 +16,14 @@
 
 import os
 import socket
+import sys
 import warnings
+from functools import wraps
 
 import pymongo.errors
-from test.utils import safe_get
+
+from test import SkipTest
+from test.version import Version
 
 HAVE_SSL = True
 try:
@@ -74,8 +78,9 @@ def connected(client):
     return client
 
 
-db_user = os.environ.get("DB_USER", "motor-test-root")
-db_password = os.environ.get("DB_PASSWORD", "pass")
+# If these are set to the empty string, substitute None.
+db_user = os.environ.get("DB_USER") or None
+db_password = os.environ.get("DB_PASSWORD") or None
 
 CERT_PATH = os.environ.get(
     'CERT_DIR',
@@ -108,6 +113,7 @@ class TestEnvironment(object):
         self.mongod_validates_client_cert = False
         self.server_is_resolvable = is_server_resolvable()
         self.sync_cx = None
+        self.is_standalone = False
         self.is_mongos = False
         self.is_replica_set = False
         self.rs_name = None
@@ -118,22 +124,19 @@ class TestEnvironment(object):
         self.secondaries = None
         self.v8 = False
         self.auth = False
-        self.user_provided = False
         self.uri = None
         self.rs_uri = None
+        self.version = None
+        self.sessions_enabled = False
+        self.fake_hostname_uri = None
 
     def setup(self):
         assert not self.initialized
         self.setup_sync_cx()
-        self.setup_auth()
-        self.setup_mongos()
+        self.setup_auth_and_uri()
+        self.setup_version()
         self.setup_v8()
         self.initialized = True
-
-    def teardown(self):
-        if self.auth and not self.user_provided:
-            # We created this user in setup_auth().
-            self.sync_cx.admin.remove_user(db_user)
 
     def setup_sync_cx(self):
         """Get a synchronous PyMongo MongoClient and determine SSL config."""
@@ -145,6 +148,8 @@ class TestEnvironment(object):
         try:
             client = connected(pymongo.MongoClient(
                 host, port,
+                username=db_user,
+                password=db_password,
                 connectTimeoutMS=connectTimeoutMS,
                 socketTimeoutMS=socketTimeoutMS,
                 serverSelectionTimeoutMS=serverSelectionTimeoutMS,
@@ -156,6 +161,8 @@ class TestEnvironment(object):
             try:
                 client = connected(pymongo.MongoClient(
                     host, port,
+                    username=db_user,
+                    password=db_password,
                     connectTimeoutMS=connectTimeoutMS,
                     socketTimeoutMS=socketTimeoutMS,
                     serverSelectionTimeoutMS=serverSelectionTimeoutMS,
@@ -167,11 +174,15 @@ class TestEnvironment(object):
             except pymongo.errors.ServerSelectionTimeoutError:
                 client = connected(pymongo.MongoClient(
                     host, port,
+                    username=db_user,
+                    password=db_password,
                     connectTimeoutMS=connectTimeoutMS,
                     socketTimeoutMS=socketTimeoutMS,
                     serverSelectionTimeoutMS=serverSelectionTimeoutMS))
 
         response = client.admin.command('ismaster')
+        self.sessions_enabled = 'logicalSessionTimeoutMinutes' in response
+        self.is_mongos = response.get('msg') == 'isdbgrid'
         if 'setName' in response:
             self.is_replica_set = True
             self.rs_name = str(response['setName'])
@@ -184,51 +195,35 @@ class TestEnvironment(object):
             self.secondaries = [
                 partition_node(m) for m in response['hosts']
                 if m != self.primary and m not in self.arbiters]
+        elif not self.is_mongos:
+            self.is_standalone = True
 
         # Reconnect to found primary, without short timeouts.
         if self.mongod_started_with_ssl:
             client = connected(pymongo.MongoClient(host, port,
+                                                   username=db_user,
+                                                   password=db_password,
                                                    ssl_ca_certs=CA_PEM,
                                                    ssl_certfile=CLIENT_PEM))
         else:
-            client = connected(pymongo.MongoClient(host, port, ssl=False))
+            client = connected(pymongo.MongoClient(host, port,
+                                                   username=db_user,
+                                                   password=db_password,
+                                                   ssl=False))
 
         self.sync_cx = client
         self.host = host
         self.port = port
 
-    def setup_auth(self):
-        """Set self.auth and self.uri, and maybe create an admin user."""
-        try:
-            cmd_line = self.sync_cx.admin.command('getCmdLineOpts')
-        except pymongo.errors.OperationFailure as e:
-            msg = e.details.get('errmsg', '')
-            if e.code == 13 or 'unauthorized' in msg or 'login' in msg:
-                # Unauthorized.
-                self.auth = True
-            else:
-                raise
-        else:
-            # Either we're on mongod < 2.7.1 and we can connect over localhost
-            # to check if --auth is in the command line. Or we're prohibited
-            # from seeing the command line so we should try blindly to create
-            # an admin user.
-            try:
-                authorization = safe_get(cmd_line,
-                                         'parsed.security.authorization')
-                if authorization:
-                    self.auth = (authorization == 'enabled')
-                else:
-                    argv = cmd_line['argv']
-                    self.auth = ('--auth' in argv or '--keyFile' in argv)
-            except pymongo.errors.OperationFailure as e:
-                if e.code == 13:
-                    # Auth failure getting command line.
-                    self.auth = True
-                else:
-                    raise
+    def setup_auth_and_uri(self):
+        """Set self.auth and self.uri."""
+        if db_user or db_password:
+            if not (db_user and db_password):
+                sys.stderr.write(
+                    "You msut set both DB_USER and DB_PASSWORD, or neither\n")
+                sys.exit(1)
 
-        if self.auth:
+            self.auth = True
             uri_template = 'mongodb://%s:%s@%s:%s/admin'
             self.uri = uri_template % (db_user, db_password,
                                        self.host, self.port)
@@ -237,15 +232,6 @@ class TestEnvironment(object):
             # to test SSL hostname validation with auth.
             self.fake_hostname_uri = uri_template % (
                 db_user, db_password, 'server', self.port)
-
-            try:
-                self.sync_cx.admin.add_user(db_user, db_password,
-                                            roles=['root'])
-            except pymongo.errors.OperationFailure:
-                # User was added before setup(), e.g. by Mongo Orchestration.
-                self.user_provided = True
-
-            self.sync_cx.admin.authenticate(db_user, db_password)
 
         else:
             self.uri = 'mongodb://%s:%s/admin' % (
@@ -257,15 +243,49 @@ class TestEnvironment(object):
         if self.rs_name:
             self.rs_uri = self.uri + '?replicaSet=' + self.rs_name
 
-    def setup_mongos(self):
-        """Set self.is_mongos."""
-        response = self.sync_cx.admin.command('ismaster')
-        self.is_mongos = response.get('msg') == 'isdbgrid'
+    def setup_version(self):
+        """Set self.version to the server's version."""
+        self.version = Version.from_client(self.sync_cx)
 
     def setup_v8(self):
         """Determine if server is running SpiderMonkey or V8."""
         if self.sync_cx.server_info().get('javascriptEngine') == 'V8':
             self.v8 = True
+
+    def _require(self, condition, msg, func=None):
+        def make_wrapper(f):
+            @wraps(f)
+            def wrap(*args, **kwargs):
+                if condition():
+                    return f(*args, **kwargs)
+                raise SkipTest(msg)
+            return wrap
+
+        if func is None:
+            def decorate(f):
+                return make_wrapper(f)
+            return decorate
+        return make_wrapper(func)
+
+    def require_version_min(self, *ver):
+        """Run a test only if the server version is at least ``version``."""
+        other_version = Version(*ver)
+        return self._require(lambda: self.version >= other_version,
+                             "Server version must be at least %s"
+                             % str(other_version))
+
+    def require_version_max(self, *ver):
+        """Run a test only if the server version is at most ``version``."""
+        other_version = Version(*ver)
+        return self._require(lambda: self.version <= other_version,
+                             "Server version must be at most %s"
+                             % str(other_version))
+
+    def require_replica_set(self, func):
+        """Run a test only if the client is connected to a replica set."""
+        return self._require(lambda: self.is_replica_set,
+                             "Not connected to a replica set",
+                             func=func)
 
 
 env = TestEnvironment()

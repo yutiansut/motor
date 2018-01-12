@@ -24,19 +24,6 @@ from tornado import gen, testing
 
 import motor
 from test.test_environment import env, CA_PEM, CLIENT_PEM
-from test.version import padded, _parse_version_string
-
-
-@gen.coroutine
-def version(client):
-    info = yield client.server_info()
-    raise gen.Return(_parse_version_string(info["version"]))
-
-
-@gen.coroutine
-def at_least(client, min_version):
-    client_version = yield version(client)
-    raise gen.Return(client_version >= tuple(padded(min_version, 4)))
 
 
 @gen.coroutine
@@ -61,11 +48,7 @@ def skip_if_mongos(client):
 
 @gen.coroutine
 def remove_all_users(db):
-    version_check = yield at_least(db.client, (2, 5, 4))
-    if version_check:
-        yield db.command({"dropAllUsersFromDatabase": 1})
-    else:
-        yield db.system.users.delete_many({})
+    yield db.command({"dropAllUsersFromDatabase": 1})
 
 
 @gen.coroutine
@@ -77,11 +60,7 @@ def skip_if_mongos(client):
 
 @gen.coroutine
 def remove_all_users(db):
-    version_check = yield at_least(db.client, (2, 5, 4))
-    if version_check:
-        yield db.command({"dropAllUsersFromDatabase": 1})
-    else:
-        yield db.system.users.delete_many({})
+    yield db.command({"dropAllUsersFromDatabase": 1})
 
 
 class MotorTest(testing.AsyncTestCase):
@@ -167,6 +146,7 @@ class MotorMockServerTest(MotorTest):
         client = motor.motor_tornado.MotorClient(server.uri,
                                                  io_loop=self.io_loop)
 
+        self.addCleanup(client.close)
         return client, server
 
     def run_thread(self, fn, *args, **kwargs):

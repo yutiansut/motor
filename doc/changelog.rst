@@ -3,14 +3,51 @@ Changelog
 
 .. currentmodule:: motor.motor_tornado
 
+Motor 1.2.1
+-----------
+
+An asyncio application that created a Change Stream with
+:meth:`MotorCollection.watch` and shut down while the Change Stream was open
+would print several errors. I have rewritten :meth:`MotorChangeStream.next`
+and some Motor internals to allow clean shutdown with asyncio.
+
 Motor 1.2
 ---------
 
-Dropped support for Python 2.6. Motor continues to support Python 2.7, and 3.3+.
+Motor 1.2 drops support for MongoDB 2.4 and adds support for MongoDB 3.6
+features. It depends on PyMongo 3.6 or later. Motor continues to support MongoDB
+2.6 and later.
+
+Dropped support for Python 2.6 and 3.3. Motor continues to support Python 2.7,
+and 3.4+.
 
 Dropped support for Tornado 3. A recent version of Tornado 4 is required.
 
+Dropped support for the `Python 3.5.0 and Python 3.5.1 "async for" protocol
+<https://python.org/dev/peps/pep-0492/#api-design-and-implementation-revisions>`_.
+Motor allows "async for" with cursors in Python 3.5.2 and later.
+
+See the :ref:`Compatibility Matrix <compatibility-matrix>` for the relationships
+among Motor, Python, Tornado, and MongoDB versions.
+
 Added support for `aiohttp`_ 2.0 and later, and dropped older aiohttp versions.
+
+Highlights include:
+
+- New method :meth:`MotorCollection.watch` to acquire a Change Stream on a
+  collection.
+- New Session API to support causal consistency, see
+  :meth:`MotorClient.start_session`.
+- Support for array_filters in
+  :meth:`~MotorCollection.update_one`,
+  :meth:`~MotorCollection.update_many`,
+  :meth:`~MotorCollection.find_one_and_update`,
+  :meth:`~MotorCollection.bulk_write`.
+- :meth:`MotorClient.list_databases` and :meth:`MotorClient.list_database_names`.
+- Support for mongodb+srv:// URIs. See
+  :class:`~pymongo.mongo_client.MongoClient` for details.
+- Support for retryable writes and the ``retryWrites`` URI option.  See
+  :class:`~pymongo.mongo_client.MongoClient` for details.
 
 The maximum number of workers in the thread pool can be overridden with an
 environment variable, see :doc:`configuration`.

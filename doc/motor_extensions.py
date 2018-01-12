@@ -103,14 +103,13 @@ def insert_callback(parameters_node):
             literal('', 'callback'),
             Text(doc))
 
-        if parameters_node.children and isinstance(parameters_node.children[0], list_item):
+        if parameters_node.children and isinstance(parameters_node.children[0],
+                                                   list_item):
             # Insert "callback" before *args and **kwargs
-            parameters_node.insert(min(args_pos, kwargs_pos), list_item('', new_item))
+            parameters_node.insert(min(args_pos, kwargs_pos),
+                                   list_item('', new_item))
         else:
             parameters_node.append(new_item)
-
-        # Insert "callback" before *args and **kwargs
-        parameters_node.insert(min(args_pos, kwargs_pos), new_item)
 
 
 docstring_warnings = []
@@ -165,7 +164,8 @@ def process_motor_nodes(app, doctree):
 
                         signature_node.insert(0, coro_annotation)
 
-                    if not is_asyncio_api(name):
+                    if (not is_asyncio_api(name)
+                            and obj_motor_info['coroutine_has_callback']):
                         retval = ("If a callback is passed, returns None, else"
                                   " returns a Future.")
 
@@ -233,6 +233,9 @@ def get_motor_attr(motor_class, name, *defargs):
     # These sub-attributes are set in motor.asynchronize()
     has_coroutine_annotation = getattr(attr, 'coroutine_annotation', False)
     is_async_method = getattr(attr, 'is_async_method', False)
+    coroutine_has_callback = has_coroutine_annotation or is_async_method
+    if has_coroutine_annotation:
+        coroutine_has_callback = getattr(attr, 'coroutine_has_callback', True)
     is_cursor_method = getattr(attr, 'is_motorcursor_chaining_method', False)
     if is_async_method or is_cursor_method:
         pymongo_method = getattr(
@@ -245,6 +248,7 @@ def get_motor_attr(motor_class, name, *defargs):
 
     motor_info[full_name] = motor_info[full_name_legacy] = {
         'is_async_method': is_async_method or has_coroutine_annotation,
+        'coroutine_has_callback': coroutine_has_callback,
         'is_pymongo_docstring': is_pymongo_doc,
         'pymongo_method': pymongo_method,
     }
@@ -260,9 +264,16 @@ def get_motor_argspec(name, method):
         del args[0]
 
     defaults = list(defaults) if defaults else []
+    add_callback = True
+    if 'callback' in chain(args or [], kwargs or []):
+        add_callback = False
+    elif is_asyncio_api(name):
+        add_callback = False
+    elif (getattr(method, 'coroutine_annotation', False)
+          and not getattr(method, 'coroutine_has_callback', True)):
+        add_callback = False
 
-    if ('callback' not in chain(args or [], kwargs or []) and
-            not is_asyncio_api(name)):
+    if add_callback:
         # Add 'callback=None' argument
         args.append('callback')
         defaults.append(None)
@@ -321,3 +332,4 @@ def setup(app):
     app.connect('autodoc-process-signature', process_motor_signature)
     app.connect('doctree-read', process_motor_nodes)
     app.connect('build-finished', build_finished)
+    return {'parallel_write_safe': True, 'parallel_read_safe': False}

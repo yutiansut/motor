@@ -20,8 +20,8 @@ from tornado.testing import gen_test
 from gridfs import GridFS, GridIn
 
 from motor import MotorGridFS, MotorGridIn, MotorGridOut
-from test import env, SkipTest
-from test.tornado_tests import at_least, MotorTest
+from test import env
+from test.tornado_tests import MotorTest
 
 
 def attrs(klass):
@@ -42,6 +42,13 @@ pymongo_client_only = set([
     'is_locked',
     'set_cursor_manager']).union(pymongo_only)
 
+pymongo_database_only = set([
+    'system_js']).union(pymongo_only)
+
+pymongo_collection_only = set([
+    'aggregate_raw_batches',
+    'find_raw_batches']).union(pymongo_only)
+
 motor_cursor_only = set([
     'fetch_next',
     'to_list',
@@ -60,16 +67,13 @@ class MotorCoreTest(MotorTest):
             attrs(self.cx) - motor_client_only)
 
     def test_database_attrs(self):
-        pymongo_database_only = set([
-            'system_js']).union(pymongo_only)
-
         self.assertEqual(
             attrs(env.sync_cx.test) - pymongo_database_only,
             attrs(self.cx.test) - motor_only)
 
     def test_collection_attrs(self):
         self.assertEqual(
-            attrs(env.sync_cx.test.test) - pymongo_only,
+            attrs(env.sync_cx.test.test) - pymongo_collection_only,
             attrs(self.cx.test.test) - motor_only)
 
     def test_cursor_attrs(self):
@@ -77,11 +81,17 @@ class MotorCoreTest(MotorTest):
             attrs(env.sync_cx.test.test.find()) - pymongo_cursor_only,
             attrs(self.cx.test.test.find()) - motor_cursor_only)
 
+    @env.require_replica_set
+    @env.require_version_min(3, 6)
+    def test_change_stream_attrs(self):
+        # Ensure the database exists before creating a change stream.
+        env.sync_cx.test.test.insert_one({})
+        self.assertEqual(
+            attrs(env.sync_cx.test.test.watch()),
+            attrs(self.cx.test.test.watch()) - motor_only)
+
     @gen_test
     def test_command_cursor_attrs(self):
-        if not (yield at_least(self.cx, (2, 6))):
-            raise SkipTest("Requires MongoDB >= 2.6")
-
         motor_agg_cursor_only = set([
             'collection',
             'start',

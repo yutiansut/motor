@@ -22,8 +22,6 @@ import unittest
 import warnings
 
 import pymongo
-from mockupdb import OpQuery
-from mockupdb import OpKillCursors
 from tornado import gen
 from tornado.concurrent import Future
 from tornado.testing import gen_test
@@ -34,9 +32,10 @@ from pymongo.errors import OperationFailure
 
 import motor
 import motor.motor_tornado
-from test import SkipTest
-from test.tornado_tests import (at_least, get_command_line,
-                                MotorTest, MotorMockServerTest,
+from test import SkipTest, env
+from test.tornado_tests import (get_command_line,
+                                MotorTest,
+                                MotorMockServerTest,
                                 server_is_mongos)
 from test.utils import one, safe_get, get_primary_pool
 
@@ -98,20 +97,23 @@ class MotorCursorTest(MotorMockServerTest):
         if 'PyPy' in sys.version:
             raise SkipTest('PyPy')
 
-        client, server = self.client_server(auto_ismaster={'ismaster': True})
-        cursor = client.test.collection.find()
+        client, server = self.client_server(auto_ismaster=True)
+        cursor = client.test.coll.find()
 
         # With Tornado, simply accessing fetch_next starts the fetch.
         cursor.fetch_next
-        request = yield self.run_thread(server.receives, OpQuery)
-        request.replies({'_id': 1}, cursor_id=123)
+        request = yield self.run_thread(server.receives, "find", "coll")
+        request.replies({"cursor": {
+            "id": 123,
+            "ns": "db.coll",
+            "firstBatch": [{"_id": 1}]}})
 
         # Decref'ing the cursor eventually closes it on the server.
         del cursor
         # Clear Runner's reference.
         yield gen.moment
-        yield self.run_thread(server.receives,
-                              OpKillCursors(cursor_ids=[123]))
+        request = yield self.run_thread(server.receives, "killCursors", "coll")
+        request.ok()
 
     @gen_test
     def test_fetch_next_without_results(self):
@@ -277,11 +279,9 @@ class MotorCursorTest(MotorMockServerTest):
         with self.assertRaises(InvalidOperation):
             yield cursor.to_list(10)
 
+    @env.require_version_min(3, 4)
     @gen_test
     def test_to_list_with_chained_collation(self):
-        if not (yield at_least(self.cx, (3, 4))):
-            raise SkipTest("collation requires MongoDB >= 3.4")
-
         yield self.make_test_data()
         cursor = self.collection.find({}, {'_id': 1}) \
             .sort([('_id', pymongo.ASCENDING)]) \
@@ -292,18 +292,23 @@ class MotorCursorTest(MotorMockServerTest):
 
     @gen_test
     def test_cursor_explicit_close(self):
-        client, server = self.client_server(auto_ismaster={'ismaster': True})
-        collection = client.test.collection
+        client, server = self.client_server(auto_ismaster=True)
+        collection = client.test.coll
         cursor = collection.find()
 
         # With Tornado, simply accessing fetch_next starts the fetch.
         fetch_next = cursor.fetch_next
-        request = yield self.run_thread(server.receives, OpQuery)
-        request.replies({'_id': 1}, cursor_id=123)
+        request = yield self.run_thread(server.receives, "find", "coll")
+        request.replies({"cursor": {
+            "id": 123,
+            "ns": "db.coll",
+            "firstBatch": [{"_id": 1}]}})
+
         self.assertTrue((yield fetch_next))
 
         close_future = cursor.close()
-        yield self.run_thread(server.receives, OpKillCursors(cursor_ids=[123]))
+        request = yield self.run_thread(server.receives, "killCursors", "coll")
+        request.ok()
         yield close_future
 
         # Cursor reports it's alive because it has buffered data, even though
@@ -396,11 +401,14 @@ class MotorCursorTest(MotorMockServerTest):
             raise SkipTest("PyPy")
 
         client, server = self.client_server(auto_ismaster=True)
-        cursor = client.test.collection.find()
+        cursor = client.test.coll.find()
 
         future = cursor.fetch_next
-        request = yield self.run_thread(server.receives, OpQuery)
-        request.replies({'_id': 1}, cursor_id=123)
+        request = yield self.run_thread(server.receives, "find", "coll")
+        request.replies({"cursor": {
+            "id": 123,
+            "ns": "db.coll",
+            "firstBatch": [{"_id": 1}]}})
         yield future  # Complete the first fetch.
 
         # Dereference the cursor.
@@ -409,7 +417,8 @@ class MotorCursorTest(MotorMockServerTest):
         # Let the event loop iterate once more to clear its references to
         # callbacks, allowing the cursor to be freed.
         yield gen.sleep(0.1)
-        yield self.run_thread(server.receives, OpKillCursors)
+        request = yield self.run_thread(server.receives, "killCursors", "coll")
+        request.ok()
 
     @gen_test
     def test_exhaust(self):
@@ -514,9 +523,6 @@ class MotorCursorMaxTimeMSTest(MotorTest):
     def maybe_skip(self):
         if (yield server_is_mongos(self.cx)):
             raise SkipTest("mongos has no maxTimeAlwaysTimeOut fail point")
-
-        if not (yield at_least(self.cx, (2, 5, 3, -1))):
-            raise SkipTest("maxTimeMS requires MongoDB >= 2.5.3")
 
         cmdline = yield get_command_line(self.cx)
         if '1' != safe_get(cmdline, 'parsed.setParameter.enableTestCommands'):

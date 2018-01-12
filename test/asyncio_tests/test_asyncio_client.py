@@ -30,7 +30,6 @@ import test
 from test.asyncio_tests import (asyncio_test,
                                 AsyncIOTestCase,
                                 AsyncIOMockServerTestCase,
-                                at_least,
                                 remove_all_users)
 from test.test_environment import db_user, db_password, env
 from test.utils import get_primary_pool
@@ -145,10 +144,6 @@ class TestAsyncIOClient(AsyncIOTestCase):
 
     @asyncio_test(timeout=60)
     def test_high_concurrency(self):
-        if env.mongod_started_with_ssl:
-            if not (yield from at_least(self.cx, (2, 6))):
-                raise SkipTest("Concurrent SSL is unreliable in 2.4")
-
         yield from self.make_test_data()
 
         concurrency = 25
@@ -233,12 +228,12 @@ class TestAsyncIOClient(AsyncIOTestCase):
         # Connect.
         yield from self.cx.server_info()
         ka = get_primary_pool(self.cx).opts.socket_keepalive
-        self.assertFalse(ka)
+        self.assertTrue(ka)
 
-        client = self.asyncio_client(socketKeepAlive=True)
+        client = self.asyncio_client(socketKeepAlive=False)
         yield from client.server_info()
         ka = get_primary_pool(client).opts.socket_keepalive
-        self.assertTrue(ka)
+        self.assertFalse(ka)
 
     def test_get_database(self):
         codec_options = CodecOptions(tz_aware=True)
@@ -251,6 +246,26 @@ class TestAsyncIOClient(AsyncIOTestCase):
         self.assertEqual(codec_options, db.codec_options)
         self.assertEqual(ReadPreference.SECONDARY, db.read_preference)
         self.assertEqual(write_concern, db.write_concern)
+
+    @asyncio_test
+    def test_list_databases(self):
+        yield from self.collection.insert_one({})
+        cursor = yield from self.cx.list_databases()
+        self.assertIsInstance(cursor, motor_asyncio.AsyncIOMotorCommandCursor)
+
+        while (yield from cursor.fetch_next):
+            info = cursor.next_object()
+            if info['name'] == self.collection.database.name:
+                break
+        else:
+            self.fail("'%s' database not found" % self.collection.database.name)
+
+    @asyncio_test
+    def test_list_database_names(self):
+        yield from self.collection.insert_one({})
+        names = yield from self.cx.list_database_names()
+        self.assertIsInstance(names, list)
+        self.assertIn(self.collection.database.name, names)
 
 
 class TestAsyncIOClientTimeout(AsyncIOMockServerTestCase):

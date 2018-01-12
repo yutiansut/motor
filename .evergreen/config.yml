@@ -73,6 +73,7 @@ functions:
               export TMPDIR="$MONGO_ORCHESTRATION_HOME/db"
               export PATH="$MONGODB_BINARIES:$PATH"
               export PROJECT="${project}"
+              export ASYNC_TEST_TIMEOUT=30
            EOT
            # See what we've done
            cat expansion.yml
@@ -447,33 +448,6 @@ tasks:
 
 # Standard test tasks {{{
 
-    - name: "test-2.4-standalone"
-      tags: ["2.4", "standalone"]
-      commands:
-        - func: "bootstrap mongo-orchestration"
-          vars:
-            VERSION: "2.4"
-            TOPOLOGY: "server"
-        - func: "run tox"
-
-    - name: "test-2.4-replica_set"
-      tags: ["2.4", "replica_set"]
-      commands:
-        - func: "bootstrap mongo-orchestration"
-          vars:
-            VERSION: "2.4"
-            TOPOLOGY: "replica_set"
-        - func: "run tox"
-
-    - name: "test-2.4-sharded_cluster"
-      tags: ["2.4", "sharded_cluster"]
-      commands:
-        - func: "bootstrap mongo-orchestration"
-          vars:
-            VERSION: "2.4"
-            TOPOLOGY: "sharded_cluster"
-        - func: "run tox"
-
     - name: "test-2.6-standalone"
       tags: ["2.6", "standalone"]
       commands:
@@ -582,6 +556,33 @@ tasks:
             TOPOLOGY: "sharded_cluster"
         - func: "run tox"
 
+    - name: "test-3.6-standalone"
+      tags: ["3.6", "standalone"]
+      commands:
+        - func: "bootstrap mongo-orchestration"
+          vars:
+            VERSION: "3.6"
+            TOPOLOGY: "server"
+        - func: "run tox"
+
+    - name: "test-3.6-replica_set"
+      tags: ["3.6", "replica_set"]
+      commands:
+        - func: "bootstrap mongo-orchestration"
+          vars:
+            VERSION: "3.6"
+            TOPOLOGY: "replica_set"
+        - func: "run tox"
+
+    - name: "test-3.6-sharded_cluster"
+      tags: ["3.6", "sharded_cluster"]
+      commands:
+        - func: "bootstrap mongo-orchestration"
+          vars:
+            VERSION: "3.6"
+            TOPOLOGY: "sharded_cluster"
+        - func: "run tox"
+
     - name: "test-latest-standalone"
       tags: ["latest", "standalone"]
       commands:
@@ -618,12 +619,6 @@ tasks:
             TOPOLOGY: "server"
         - func: "run enterprise auth tests"
 
-    - name: "synchro"
-      commands:
-        - func: "run tox"
-          vars:
-             TOX_ENV: py3-sphinx-docs
-
     - name: "docs"
       commands:
         - func: "run tox"
@@ -634,7 +629,7 @@ tasks:
       commands:
         - func: "bootstrap mongo-orchestration"
           vars:
-            VERSION: "latest"
+            VERSION: "3.6"
             TOPOLOGY: "server"
         - func: "run tox"
           vars:
@@ -651,6 +646,10 @@ axes:
         display_name: "latest"
         variables:
            VERSION: "latest"
+      - id: "3.6"
+        display_name: "3.6"
+        variables:
+           VERSION: "3.6"
       - id: "3.4"
         display_name: "3.4"
         variables:
@@ -667,10 +666,6 @@ axes:
         display_name: "2.6"
         variables:
            VERSION: "2.6"
-      - id: "2.4"
-        display_name: "2.4"
-        variables:
-           VERSION: "2.4"
 
   - id: topology
     display_name: Topology
@@ -688,18 +683,6 @@ axes:
         variables:
            TOPOLOGY: "sharded_cluster"
 
-  - id: auth
-    display_name: Authentication
-    values:
-      - id: auth
-        display_name: Auth
-        variables:
-           AUTH: "auth"
-      - id: noauth
-        display_name: NoAuth
-        variables:
-           AUTH: "noauth"
-
   - id: ssl
     display_name: SSL
     values:
@@ -707,10 +690,12 @@ axes:
         display_name: SSL
         variables:
            SSL: "ssl"
+           AUTH: "auth"
       - id: nossl
         display_name: NoSSL
         variables:
            SSL: "nossl"
+           AUTH: "noauth"
 
   - id: tox-env
     display_name: "Tox Env"
@@ -728,10 +713,6 @@ axes:
         variables:
            TOX_ENV: "tornado4-pypy3"
            PYTHON_BINARY: "/opt/python/pypy3.5/bin/pypy3"
-      - id: "tornado4-py33"
-        variables:
-           TOX_ENV: "tornado4-py33"
-           PYTHON_BINARY: "/opt/python/3.3/bin/python3"
       - id: "tornado4-py34"
         variables:
            TOX_ENV: "tornado4-py34"
@@ -760,10 +741,6 @@ axes:
         variables:
            TOX_ENV: "tornado_git-py36"
            PYTHON_BINARY: "/opt/python/3.6/bin/python3"
-      - id: "asyncio-py33"
-        variables:
-           TOX_ENV: "asyncio-py33"
-           PYTHON_BINARY: "/opt/python/3.3/bin/python3"
       - id: "asyncio-py34"
         variables:
            TOX_ENV: "asyncio-py34"
@@ -776,10 +753,6 @@ axes:
         variables:
            TOX_ENV: "asyncio-py36"
            PYTHON_BINARY: "/opt/python/3.6/bin/python3"
-      - id: "asyncio-tornado4-py33"
-        variables:
-           TOX_ENV: "asyncio-tornado4-py33"
-           PYTHON_BINARY: "/opt/python/3.3/bin/python3"
       - id: "py3-pymongo-master"
         variables:
            TOX_ENV: "py3-pymongo-master"
@@ -810,9 +783,9 @@ axes:
   - id: os
     display_name: "Operating System"
     values:
-      - id: "ubuntu"
-        display_name: "Ubuntu 12.04"
-        run_on: "ubuntu1204-test"
+      - id: "rhel"
+        display_name: "RHEL 6.2"
+        run_on: "rhel62-small"
         variables:
            TOX_BINARY: "/opt/python/3.6/bin/tox"
       - id: "osx"
@@ -824,35 +797,34 @@ axes:
 buildvariants:
 
 - matrix_name: "test-mongodb-versions"
-  matrix_spec: {"os": "ubuntu", "tox-env": "*", auth: "*", ssl: "*"}
+  matrix_spec: {"os": "rhel", "tox-env": "*", ssl: "*"}
   exclude_spec:
    # TODO: synchro needs PyMongo master's updated SSL test certs,
    # which may require Motor test suite changes.
    - os: "*"
      tox-env: ["synchro"]
-     auth: "*"
      ssl: "ssl"
-  display_name: "${os} ${tox-env} ${auth} ${ssl}"
+  display_name: "${os} ${tox-env} ${ssl}"
   tasks:
      - ".latest"
+     - ".3.6"
      - ".3.4"
      - ".3.2"
      - ".3.0"
      - ".2.6"
-     - ".2.4"
 
 - matrix_name: "enterprise-auth"
-  matrix_spec: {"tox-env": ["synchro"], auth: "auth"}
+  matrix_spec: {"tox-env": ["synchro"], ssl: "ssl"}
   display_name: "Enterprise Auth"
   run_on:
-     - ubuntu1604-test
+     - rhel62-small
   tasks:
      - name: "test-enterprise-auth"
 
 - name: "docs"
   display_name: "Docs - Build"
   run_on:
-     - ubuntu1204-test
+     - rhel62-small
   expansions:
      TOX_ENV: "py3-sphinx-docs"
      TOX_BINARY: "/opt/python/3.6/bin/tox"
@@ -863,7 +835,7 @@ buildvariants:
 - name: "doctests"
   display_name: "Docs - Test"
   run_on:
-     - ubuntu1204-test
+     - rhel62-small
   expansions:
      TOX_ENV: "py3-sphinx-doctest"
      TOX_BINARY: "/opt/python/3.6/bin/tox"
@@ -872,17 +844,17 @@ buildvariants:
      - name: "doctest"
 
 - matrix_name: "test-mongodb-versions-macos"
-  matrix_spec: {"os": "osx", "tox-env-osx": "*", auth: "*", ssl: "*"}
+  matrix_spec: {"os": "osx", "tox-env-osx": "*", ssl: "*"}
   exclude_spec:
    # TODO: synchro needs PyMongo master's updated SSL test certs,
    # which may require Motor test suite changes.
    - os: "*"
      tox-env-osx: ["synchro"]
-     auth: "*"
      ssl: "ssl"
-  display_name: "${os} ${tox-env-osx} ${ssl} ${auth}"
+  display_name: "${os} ${tox-env-osx} ${ssl}"
   tasks:
      - ".latest"
+     - ".3.6"
      - ".3.4"
      - ".3.2"
   rules:
@@ -890,10 +862,8 @@ buildvariants:
      - if:
          os: "*"
          tox-env-osx: "*"
-         auth: "*"
          ssl: "nossl"
        then:
          add_tasks:
             - ".3.0"
             - ".2.6"
-            - ".2.4"

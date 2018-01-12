@@ -35,7 +35,7 @@ import motor
 import motor.motor_tornado
 import test
 from test import SkipTest
-from test.tornado_tests import at_least, MotorTest, skip_if_mongos
+from test.tornado_tests import MotorTest, skip_if_mongos
 from test.utils import ignore_deprecations
 
 
@@ -246,7 +246,7 @@ class MotorCollectionTest(MotorTest):
 
         coll.database.client.close()
 
-    @gen_test
+    @gen_test(timeout=30)
     def test_nested_callbacks(self):
         results = [0]
         future = Future()
@@ -351,11 +351,8 @@ class MotorCollectionTest(MotorTest):
     def assertAllDocs(self, expected_sum, docs):
         self.assertEqual(expected_sum, sum(doc['_id'] for doc in docs))
 
-    @gen_test
+    @gen_test(timeout=30)
     def test_aggregation_cursor(self):
-        if not (yield at_least(self.cx, (2, 6))):
-            raise SkipTest("Requires MongoDB >= 2.6")
-
         db = self.db
 
         # A small collection which returns only an initial batch,
@@ -368,9 +365,6 @@ class MotorCollectionTest(MotorTest):
 
     @gen_test
     def test_aggregation_cursor_exc_info(self):
-        if not (yield at_least(self.cx, (2, 6))):
-            raise SkipTest("Requires MongoDB >= 2.6")
-
         if sys.version_info < (3,):
             raise SkipTest("Requires Python 3")
 
@@ -388,11 +382,8 @@ class MotorCollectionTest(MotorTest):
             self.assertTrue('_unpack_response' in formatted
                             or '_check_command_response' in formatted)
 
-    @gen_test
+    @gen_test(timeout=30)
     def test_aggregation_cursor_to_list_callback(self):
-        if not (yield at_least(self.cx, (2, 6))):
-            raise SkipTest("Requires MongoDB >= 2.6")
-
         db = self.db
 
         # A small collection which returns only an initial batch,
@@ -414,9 +405,6 @@ class MotorCollectionTest(MotorTest):
 
     @gen_test(timeout=30)
     def test_parallel_scan(self):
-        if not (yield at_least(self.cx, (2, 5, 5))):
-            raise SkipTest("Requires MongoDB >= 2.5.5")
-
         yield skip_if_mongos(self.cx)
 
         collection = self.collection.with_options(

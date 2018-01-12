@@ -103,6 +103,9 @@ This will print something like::
   - `bypass_document_validation`: (optional) If ``True``, allows the
     write to opt-out of document level validation. Default is
     ``False``.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
 
 :Returns:
   An instance of :class:`~pymongo.results.BulkWriteResult`.
@@ -111,6 +114,9 @@ This will print something like::
 
 .. note:: `bypass_document_validation` requires server version
   **>= 3.2**
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 create_indexes_doc = """Create one or more indexes on this collection::
@@ -130,10 +136,18 @@ This prints::
 :Parameters:
   - `indexes`: A list of :class:`~pymongo.operations.IndexModel`
     instances.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
+  - `**kwargs` (optional): optional arguments to the createIndexes
+    command (like maxTimeMS) can be passed as keyword arguments.
 
 The :attr:`~pymongo.collection.Collection.write_concern` of
 this collection is automatically applied to this operation when using
 MongoDB >= 3.4.
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 cmd_doc = """Issue a MongoDB command.
@@ -179,8 +193,14 @@ kwargs. So ``{filemd5: object_id, root: file_root}`` becomes::
     in this list will be ignored by error-checking
   - `read_preference`: The read preference for this operation.
     See :mod:`~pymongo.read_preferences` for options.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
   - `**kwargs` (optional): additional keyword arguments will
     be added to the command document before it is sent
+
+.. versionchanged:: 1.2
+   Added session parameter.
 
 .. mongodoc:: commands
 """
@@ -200,9 +220,15 @@ This deletes all matching documents and prints "3".
   - `collation` (optional): An instance of
     :class:`~pymongo.collation.Collation`. This option is only supported
     on MongoDB 3.4 and above.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
 
 :Returns:
   - An instance of :class:`~pymongo.results.DeleteResult`.
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 delete_one_doc = """Delete a single document matching the filter.
@@ -220,9 +246,15 @@ This deletes one matching document and prints "1".
   - `collation` (optional): An instance of
     :class:`~pymongo.collation.Collation`. This option is only supported
     on MongoDB 3.4 and above.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
 
 :Returns:
   - An instance of :class:`~pymongo.results.DeleteResult`.
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 drop_doc = """Alias for ``drop_collection``.
@@ -263,8 +295,14 @@ sure to create indexes if needed and as appropriate.
 :Parameters:
   - `document_or_id` (optional): query document, or _id of the
     document to check for
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
   - `**kwargs` (optional): keyword arguments are used as a
     query document, if they're present.
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 
@@ -293,6 +331,9 @@ this Motor collection instance.
   .. code-block:: python3
 
       await collection.find_one(max_time_ms=100)
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 find_one_and_delete_doc = """Finds a single document and deletes it, returning 
@@ -349,6 +390,9 @@ This prints::
   - `sort` (optional): a list of (key, direction) pairs
     specifying the sort order for the query. If multiple documents
     match the query, they are sorted and the first is deleted.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
   - `**kwargs` (optional): additional command arguments can be passed
     as keyword arguments (for example maxTimeMS can be used with
     recent server versions).
@@ -357,6 +401,9 @@ This command uses the :class:`~pymongo.write_concern.WriteConcern` of this
 :class:`~pymongo.collection.Collection` when connected to MongoDB >= 3.2. Note
 that using an elevated write concern with this command may be slower compared
 to using the default write concern.
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 find_one_and_replace_doc = """Finds a single document and replaces it, returning
@@ -408,6 +455,9 @@ This will print::
     if no document matches. If
     :attr:`ReturnDocument.AFTER`, returns the replaced
     or inserted document.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
   - `**kwargs` (optional): additional command arguments can be passed
     as keyword arguments (for example maxTimeMS can be used with
     recent server versions).
@@ -416,6 +466,9 @@ This command uses the :class:`~pymongo.write_concern.WriteConcern` of this
 :class:`~pymongo.collection.Collection` when connected to MongoDB >= 3.2. Note
 that using an elevated write concern with this command may be slower compared
 to using the default write concern.
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 
@@ -512,6 +565,11 @@ This would print::
     if no document matches. If
     :attr:`ReturnDocument.AFTER`, returns the updated
     or inserted document.
+  - `array_filters` (optional): A list of filters specifying which
+    array elements an update should apply. Requires MongoDB 3.6+.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
   - `**kwargs` (optional): additional command arguments can be passed
     as keyword arguments (for example maxTimeMS can be used with
     recent server versions).
@@ -521,6 +579,9 @@ This command uses the
 :class:`~pymongo.collection.Collection` when connected to MongoDB >=
 3.2. Note that using an elevated write concern with this command may
 be slower compared to using the default write concern.
+
+.. versionchanged:: 1.2
+   Added array_filters and session parameters.
 """
 
 index_information_doc = """Get information on this collection's indexes.
@@ -543,6 +604,9 @@ This prints::
   'x_1'
   {'_id_': {'key': [('_id', 1)]},
    'x_1': {'unique': True, 'key': [('x', 1)]}}
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 insert_many_doc = """Insert an iterable of documents. ::
@@ -565,6 +629,9 @@ This prints something like::
   - `bypass_document_validation`: (optional) If ``True``, allows the
     write to opt-out of document level validation. Default is
     ``False``.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
 
 :Returns:
   An instance of :class:`~pymongo.results.InsertManyResult`.
@@ -573,6 +640,9 @@ This prints something like::
 
 .. note:: `bypass_document_validation` requires server version
   **>= 3.2**
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 
@@ -593,6 +663,9 @@ This code outputs the new document's ``_id``::
   - `bypass_document_validation`: (optional) If ``True``, allows the
     write to opt-out of document level validation. Default is
     ``False``.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
 
 :Returns:
   - An instance of :class:`~pymongo.results.InsertOneResult`.
@@ -601,6 +674,9 @@ This code outputs the new document's ``_id``::
 
 .. note:: `bypass_document_validation` requires server version
   **>= 3.2**
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 
@@ -621,6 +697,9 @@ response from the server to the `map reduce command`_.
     e.g. SON([('replace', <collection name>), ('db', <database name>)])
   - `full_response` (optional): if ``True``, return full response to
     this command - otherwise just return the result collection
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
   - `callback` (optional): function taking (result, error), executed when
     operation completes.
   - `**kwargs` (optional): additional arguments to the
@@ -639,6 +718,9 @@ If a callback is passed, returns None, else returns a Future.
 .. _map reduce command: http://docs.mongodb.org/manual/reference/command/mapReduce/
 
 .. mongodoc:: mapreduce
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 
@@ -694,12 +776,18 @@ This prints::
   - `collation` (optional): An instance of
     :class:`~pymongo.collation.Collation`. This option is only supported
     on MongoDB 3.4 and above.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
 
 :Returns:
   - An instance of :class:`~pymongo.results.UpdateResult`.
 
 .. note:: `bypass_document_validation` requires server version
   **>= 3.2**
+
+.. versionchanged:: 1.2
+   Added session parameter.
 """
 
 
@@ -747,12 +835,20 @@ This prints::
   - `collation` (optional): An instance of
     :class:`~pymongo.collation.Collation`. This option is only supported
     on MongoDB 3.4 and above.
+  - `array_filters` (optional): A list of filters specifying which
+    array elements an update should apply. Requires MongoDB 3.6+.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
 
 :Returns:
   - An instance of :class:`~pymongo.results.UpdateResult`.
 
 .. note:: `bypass_document_validation` requires server version
   **>= 3.2**
+
+.. versionchanged:: 1.2
+   Added array_filters and session parameters.
 """
 
 
@@ -794,12 +890,20 @@ This prints::
   - `collation` (optional): An instance of
     :class:`~pymongo.collation.Collation`. This option is only supported
     on MongoDB 3.4 and above.
+  - `array_filters` (optional): A list of filters specifying which
+    array elements an update should apply. Requires MongoDB 3.6+.
+  - `session` (optional): a
+    :class:`~pymongo.client_session.ClientSession`, created with
+    :meth:`~MotorClient.start_session`.
 
 :Returns:
   - An instance of :class:`~pymongo.results.UpdateResult`.
 
 .. note:: `bypass_document_validation` requires server version
   **>= 3.2**
+
+.. versionchanged:: 1.2
+   Added array_filters and session parameters.
 """
 
 
@@ -885,3 +989,41 @@ cursor has any effect.
     key, if not given :data:`~pymongo.ASCENDING` is assumed
 """
 
+start_session_doc = """
+Start a logical session.
+
+This method takes the same parameters as PyMongo's
+:class:`~pymongo.client_session.SessionOptions`. See the
+:mod:`~pymongo.client_session` module for details.
+
+.. code-block:: python3
+
+  async def coro():
+      collection = client.db.collection
+  
+      with (await client.start_session()) as s:
+          doc = {'_id': ObjectId(), 'x': 1}
+          await collection.insert_one(doc, session=s)
+
+          secondary = collection.with_options(
+              read_preference=ReadPreference.SECONDARY)
+  
+          # Sessions are causally consistent by default, we can read the doc
+          # we just inserted, even reading from a secondary. 
+          async for doc in secondary.find(session=s):
+              print(doc)
+
+Do **not** use the same session for multiple operations concurrently.
+
+Requires MongoDB 3.6. It is an error to call :meth:`start_session`
+if this client has been authenticated to multiple databases using the
+deprecated method :meth:`~pymongo.database.Database.authenticate`.
+
+A :class:`~pymongo.client_session.ClientSession` may only be used with
+the MongoClient that started it.
+  
+:Returns:
+  An instance of :class:`~pymongo.client_session.ClientSession`.
+
+.. versionadded:: 1.2
+"""

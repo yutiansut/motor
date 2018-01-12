@@ -35,25 +35,22 @@ import synchro
 from motor.motor_py3_compat import PY3
 
 excluded_modules = [
-    # Depending on PYTHONPATH, Motor's direct tests may be imported - don't
-    # run them now.
-    'test.test_motor_',
-
     # Exclude some PyMongo tests that can't be applied to Synchro.
     'test.test_cursor_manager',
     'test.test_threads',
-    'test.test_threads_replica_set_client',
     'test.test_pooling',
+    'test.test_legacy_api',
 
     # Complex PyMongo-specific mocking.
     'test.test_replica_set_reconfig',
-    'test.test_mongos_ha',
+
+    # Accesses PyMongo internals. Tested directly in Motor.
+    'test.test_session',
 ]
 
 excluded_tests = [
     # Motor's reprs aren't the same as PyMongo's.
     '*.test_repr',
-    '*.test_repr_replica_set',
     'TestClient.test_unix_socket',
 
     # Lazy-connection tests require multithreading; we test concurrent
@@ -61,17 +58,11 @@ excluded_tests = [
     'TestClientLazyConnect.*',
 
     # Motor doesn't support forking or threading.
-    '*.test_fork',
     '*.test_interrupt_signal',
-    'TestCollection.test_ensure_unique_index_threaded',
     'TestGridfs.test_threaded_reads',
     'TestGridfs.test_threaded_writes',
-    'TestLegacy.test_ensure_index_threaded',
-    'TestLegacy.test_ensure_purge_index_threaded',
-    'TestLegacy.test_ensure_unique_index_threaded',
-    'TestThreadsAuth.*',
-    'TestThreadsAuthReplicaSet.*',
     'TestGSSAPI.test_gssapi_threaded',
+    'TestCursor.test_concurrent_close',
 
     # Relies on threads; tested directly.
     'TestCollection.test_parallel_scan',
@@ -91,15 +82,17 @@ excluded_tests = [
     'TestDatabase.test_system_js',
     'TestDatabase.test_system_js_list',
 
-    # Weird use-case.
-    'TestCursor.test_cursor_transfer',
-
     # Requires indexing / slicing cursors, which Motor doesn't do, see MOTOR-84.
     'TestCollection.test_min_query',
     'TestCursor.test_clone',
     'TestCursor.test_count_with_limit_and_skip',
     'TestCursor.test_getitem_numeric_index',
     'TestCursor.test_getitem_slice_index',
+    'TestCursor.test_tailable',
+
+    # Raw batches aren't implemented yet, MOTOR-172.
+    'TestRawBatchCursor.*',
+    'TestRawBatchCommandCursor.*',
 
     # No context-manager protocol for MotorCursor.
     'TestCursor.test_with_statement',
@@ -107,9 +100,6 @@ excluded_tests = [
     # Can't iterate a GridOut in Motor.
     'TestGridFile.test_iterator',
     'TestGridfs.test_missing_length_iter',
-
-    # Not worth simulating a user calling GridOutCursor(args).
-    'TestGridFileNoConnect.test_grid_out_cursor_options',
 
     # No context-manager protocol for MotorGridIn, and can't set attrs.
     'TestGridFile.test_context_manager',
@@ -123,13 +113,10 @@ excluded_tests = [
     # Complex PyMongo-specific mocking.
     '*.test_wire_version',
     'TestClient.test_heartbeat_frequency_ms',
-    'TestClient.test_max_wire_version',
-    'TestClient.test_wire_version_mongos_ha',
     'TestExhaustCursor.*',
     'TestHeartbeatMonitoring.*',
     'TestMongoClientFailover.*',
     'TestMongosLoadBalancing.*',
-    'TestReplicaSetClientExhaustCursor.*',
     'TestReplicaSetClientInternalIPs.*',
     'TestReplicaSetClientMaxWriteBatchSize.*',
     'TestSSL.test_system_certs_config_error',
@@ -138,8 +125,6 @@ excluded_tests = [
     'TestReplicaSetClient.test_timeout_does_not_mark_member_down',
 
     # Accesses PyMongo internals.
-    'TestClient.test_kill_cursor_explicit_primary',
-    'TestClient.test_kill_cursor_explicit_secondary',
     'TestClient.test_close_kills_cursors',
     'TestClient.test_stale_getmore',
     'TestCollection.test_aggregation_cursor',
@@ -176,6 +161,11 @@ class SynchroNosePlugin(Plugin):
         self.enabled = True
 
     def wantModule(self, module):
+        # Depending on PYTHONPATH, Motor's direct tests may be imported - don't
+        # run them now.
+        if module.__name__.startswith('test.test_motor_'):
+            return False
+
         for module_name in excluded_modules:
             if module_name.endswith('*'):
                 if module.__name__.startswith(module_name.rstrip('*')):
@@ -184,6 +174,7 @@ class SynchroNosePlugin(Plugin):
                     return False
 
             elif module.__name__ == module_name:
+                excluded_modules_matched.add(module_name)
                 return False
 
         return True
@@ -253,14 +244,22 @@ if __name__ == '__main__':
     # can run to completion while foreground pauses.
     sys.modules['time'] = synchro.TimeModule()
 
+    if '--check-exclude-patterns' in sys.argv:
+        check_exclude_patterns = True
+        sys.argv.remove('--check-exclude-patterns')
+    else:
+        check_exclude_patterns = False
+
     nose.main(
         config=Config(plugins=PluginManager()),
-        addplugins=[SynchroNosePlugin(), Skip(), Xunit()])
-    
-    unused_module_patterns = set(excluded_modules) - excluded_modules_matched
-    assert not unused_module_patterns, "Unused module patterns: %s" % (
-        unused_module_patterns, )
+        addplugins=[SynchroNosePlugin(), Skip(), Xunit()],
+        exit=False)
 
-    unused_test_patterns = set(excluded_tests) - excluded_tests_matched
-    assert not unused_test_patterns, "Unused test patterns: %s" % (
-        unused_test_patterns, )
+    if check_exclude_patterns:
+        unused_module_pats = set(excluded_modules) - excluded_modules_matched
+        assert not unused_module_pats, "Unused module patterns: %s" % (
+            unused_module_pats, )
+
+        unused_test_pats = set(excluded_tests) - excluded_tests_matched
+        assert not unused_test_pats, "Unused test patterns: %s" % (
+            unused_test_pats, )

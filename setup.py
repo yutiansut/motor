@@ -17,7 +17,6 @@ Natural Language :: English
 Programming Language :: Python :: 2
 Programming Language :: Python :: 2.7
 Programming Language :: Python :: 3
-Programming Language :: Python :: 3.3
 Programming Language :: Python :: 3.4
 Programming Language :: Python :: 3.5
 Programming Language :: Python :: 3.6
@@ -33,7 +32,7 @@ long_description = open("README.rst").read()
 
 install_requires = ['pymongo>=3.4,<4']
 
-tests_require = ['mockupdb']
+tests_require = ['mockupdb>=1.2.1']
 
 if sys.version_info[0] < 3:
     # Need concurrent.futures backport in Python 2 for MotorMockServerTest.
@@ -98,13 +97,15 @@ class test(Command):
             loader.avoid('tornado_tests', reason='no tornado')
         elif not testenv.HAVE_ASYNCIO:
             loader.avoid('asyncio_tests', reason='no asyncio')
-        
+
         if not testenv.HAVE_AIOHTTP:
             loader.avoid('asyncio_tests.test_aiohttp_gridfs',
                          reason='no aiohttp')
 
         if sys.version_info[:2] < (3, 5):
             loader.avoid('asyncio_tests.test_asyncio_await',
+                         reason='python < 3.5')
+            loader.avoid('asyncio_tests.test_asyncio_change_stream',
                          reason='python < 3.5')
 
         # Decide if we can run async / await tests with Tornado.
@@ -113,6 +114,8 @@ class test(Command):
             loader.avoid(test_motor_await, reason='no tornado')
         elif sys.version_info[:2] < (3, 5):
             loader.avoid(test_motor_await, reason='python < 3.5')
+            loader.avoid('tornado_tests.test_motor_change_stream',
+                         reason='python < 3.5')
 
         if self.test_suite is None:
             suite = loader.discover(self.test_module)
@@ -135,7 +138,6 @@ class test(Command):
             suppress_tornado_warnings()
 
         result = runner.run(suite)
-        env.teardown()
         sys.exit(not result.wasSuccessful())
 
 
@@ -150,7 +152,7 @@ if sys.version_info[0] >= 3:
     packages.append('motor.aiohttp')
 
 setup(name='motor',
-      version='1.2.dev0',
+      version='1.3.dev0',
       packages=packages,
       description=description,
       long_description=long_description,

@@ -31,7 +31,6 @@ from mockupdb import MockupDB
 
 from motor import motor_asyncio
 from test.assert_logs_backport import AssertLogsMixin
-from test.version import _parse_version_string, padded
 from test.test_environment import env, CA_PEM, CLIENT_PEM
 
 
@@ -153,6 +152,7 @@ class AsyncIOMockServerTestCase(AsyncIOTestCase):
     def client_server(self, *args, **kwargs):
         server = self.server(*args, **kwargs)
         client = motor_asyncio.AsyncIOMotorClient(server.uri, io_loop=self.loop)
+        self.addCleanup(client.close)
 
         return client, server
 
@@ -268,18 +268,6 @@ def server_is_mongos(client):
 
 
 @asyncio.coroutine
-def version(client):
-    info = yield from client.server_info()
-    return _parse_version_string(info["version"])
-
-
-@asyncio.coroutine
-def at_least(client, min_version):
-    client_version = yield from version(client)
-    return client_version >= tuple(padded(min_version, 4))
-
-
-@asyncio.coroutine
 def skip_if_mongos(client):
     is_mongos = yield from server_is_mongos(client)
     if is_mongos:
@@ -288,8 +276,4 @@ def skip_if_mongos(client):
 
 @asyncio.coroutine
 def remove_all_users(db):
-    version_check = yield from at_least(db.client, (2, 5, 4))
-    if version_check:
-        yield from db.command({"dropAllUsersFromDatabase": 1})
-    else:
-        yield from db.system.users.delete_many({})
+    yield from db.command({"dropAllUsersFromDatabase": 1})
